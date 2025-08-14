@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Repo Browser</title>
+  <style>
+    :root { --w: 920px; --pad: 12px; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; margin: 0; }
+    header { padding: 16px; border-bottom: 1px solid #ddd; }
+    main { max-width: var(--w); margin: 0 auto; padding: 16px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .meta { color: #555; font-size: 14px; }
+    .controls { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+    input[type="search"] { padding: 8px; width: min(380px, 100%); }
+    button { padding: 8px 12px; border: 1px solid #ccc; background: #fafafa; cursor: pointer; border-radius: 6px; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .crumbs { font-size: 14px; margin: 6px 0 0; word-break: break-all; }
+    .list { border: 1px solid #e5e5e5; border-radius: 8px; overflow: hidden; }
+    .item { display: grid; grid-template-columns: 28px 1fr auto auto; gap: 10px; padding: 10px var(--pad); align-items: center; border-top: 1px solid #f1f1f1; }
+    .item:first-child { border-top: 0; }
+    .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .size, .updated { color: #666; font-size: 12px; }
+    .icon { text-align: center; }
+    .icon span { display: inline-block; width: 20px; }
+    .empty { padding: 16px; color: #666; }
+    .footer { margin-top: 24px; color: #666; font-size: 12px; }
+    code.inline { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; }
+    a { text-decoration: none; color: #0366d6; }
+    a:hover { text-decoration: underline; }
+    .pill { padding: 2px 8px; border: 1px solid #ddd; border-radius: 999px; font-size: 12px; color: #444; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="row">
+      <strong id="title">GitHub Pages File Browser</strong>
+      <span class="pill" id="repo-pill"></span>
+      <span class="pill" id="branch-pill"></span>
+    </div>
+    <div class="crumbs" id="breadcrumbs"></div>
+  </header>
+
+  <main>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Filter (fuzzy)…" />
+      <button id="upBtn" title="Go up one folder">⬆️ Up</button>
+      <button id="rootBtn" title="Go to root">🏠 Root</button>
+      <a id="viewRawLink" class="pill" href="#" target="_blank" rel="noopener">Raw for this folder</a>
+      <span class="meta" id="limitNote" title="GitHub API limit for unauthenticated requests is ~60/hour per IP."></span>
+    </div>
+
+    <div class="list" id="list"></div>
+    <div class="footer">
+      Uses the public <a href="https://docs.github.com/rest/repos/contents#get-repository-content" target="_blank" rel="noopener">GitHub Contents API</a>.
+      For custom domains where owner/repo can’t be inferred, append <code class="inline">?owner=&lt;u&gt;&amp;repo=&lt;r&gt;</code> (and optionally <code class="inline">&amp;branch=main</code>).
+    </div>
+  </main>
+
+  <div id="app" data-owner="" data-repo="" data-branch=""></div>
+
+<script>
+(function () {
+  // ---------- Utilities ----------
+  const $ = (id) => document.getElementById(id);
+  const qs = new URLSearchParams(location.search);
+  const decode = (s) => s.replace(/^\/+|\/+$/g, "");
+  const join = (...parts) => parts.filter(Boolean).join("/").replace(/\/\/+/g, "/");
+  const fmtBytes = (b) => (b == null ? "" :
+    b < 1024 ? `${b} B` :
+    b < 1024**2 ? `${(b/1024).toFixed(1)} KB` :
+    b < 1024**3 ? `${(b/1024**2).toFixed(1)} MB` :
+                  `${(b/1024**3).toFixed(1)} GB`);
+  const icon = (t, name) => {
+    if (t === "dir") return "📁";
+    const ext = (name.split(".").pop() || "").toLowerCase();
+    if (["png","jpg","jpeg","gif","webp","svg"].includes(ext)) return "🖼️";
+    if (["md"].includes(ext)) return "📝";
+    if (["html","htm"].includes(ext)) return "🌐";
+    if (["js","ts","json"].includes(ext)) return "📜";
+    if (["css"].includes(ext)) return "🎨";
+    if (["zip","gz","tgz","rar","7z"].includes(ext)) return "🧩";
+    return "📄";
+  };
+
+  // ---------- Infer owner/repo/branch ----------
+  function inferRepo() {
+    const app = $("app");
+    let owner = qs.get("owner") || app.dataset.owner || "";
+    let repo  = qs.get("repo")  || app.dataset.repo  || "";
+    let branch = qs.get("branch") || app.dataset.branch || "";
+
+    const host = location.hostname;           // e.g., username.github.io or custom domain
+    const path = decode(location.pathname);   // e.g., repo/dir/sub
+
+    if (!owner || !repo) {
+      if (host.endsWith("github.io")) {
+        owner = owner || host.split(".")[0];
+        const segs = path.split("/").filter(Boolean);
+        if (segs.length > 0) {
+          repo = repo || segs[0];
+        } else {
+          repo = repo || `${owner}.github.io`; // user/organization site repo
+        }
+      }
+      // For custom domains, you must supply ?owner=&repo= (cannot infer safely)
+    }
+
+    return { owner, repo, branch };
+  }
+
+  async function pickBranch(owner, repo, preferred) {
+    const tryList = [preferred, "main", "master"].filter(Boolean);
+    for (const br of tryList) {
+      const ok = await pingBranch(owner, repo, br);
+      if (ok) return br;
+    }
+    // As a last resort, ask /branches and take default branch
+    try {
+      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+      if (!res.ok) return null;
+      const meta = await res.json();
+      return meta.default_branch || null;
+    } catch { return null; }
+  }
+
+  async function pingBranch(owner, repo, branch) {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/?ref=${encodeURIComponent(branch)}`);
+      return r.ok;
+    } catch { return false; }
+  }
+
+  // ---------- Rendering ----------
+  function renderBreadcrumbs(basePath, onClick) {
+    const parts = decode(basePath).split("/").filter(Boolean);
+    const nodes = ['<a href="#" data-path="">/</a>'];
+    let acc = "";
+    for (let i = 0; i < parts.length; i++) {
+      acc = join(acc, parts[i]);
+      nodes.push(`<span>/</span><a href="#" data-path="${acc}">${parts[i]}</a>`);
+    }
+    $("breadcrumbs").innerHTML = nodes.join(" ");
+    $("breadcrumbs").querySelectorAll("a").forEach(a => {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        onClick(a.getAttribute("data-path"));
+      });
+    });
+  }
+
+  function buildPagesUrl(kind, owner, repo, branch, path) {
+    // kind: 'view' renders via Pages; 'raw' fetches raw content
+    const isUserSite = location.hostname.endsWith("github.io") && (repo === `${owner}.github.io`);
+    const base = location.origin;
+    if (kind === "view") {
+      return isUserSite ? `${base}/${path}` : `${base}/${repo}/${path}`;
+    } else {
+      return `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${path}`;
+    }
+  }
+
+  function renderList(items, ctx) {
+    const list = $("list");
+    if (!items || items.length === 0) {
+      list.innerHTML = `<div class="empty">No items.</div>`;
+      return;
+    }
+    const rows = items.map(x => {
+      const ico = icon(x.type, x.name);
+      const viewHref = x.type === "dir"
+        ? "#"
+        : buildPagesUrl("view", ctx.owner, ctx.repo, ctx.branch, join(ctx.path, x.name));
+      const rawHref = x.type === "dir"
+        ? "#"
+        : buildPagesUrl("raw", ctx.owner, ctx.repo, ctx.branch, join(ctx.path, x.name));
+      const nameHtml = x.type === "dir"
+        ? `<a class="name" href="#" data-dir="${x.name}">${x.name}</a>`
+        : `<a class="name" href="${viewHref}" target="_blank" rel="noopener">${x.name}</a>
+           &nbsp;<a href="${rawHref}" target="_blank" rel="noopener" title="Raw file">raw</a>`;
+      return `
+      <div class="item">
+        <div class="icon"><span>${ico}</span></div>
+        <div>${nameHtml}</div>
+        <div class="size">${x.type === "dir" ? "" : fmtBytes(x.size)}</div>
+        <div class="updated">${x._updated || ""}</div>
+      </div>`;
+    }).join("");
+    list.innerHTML = rows;
+
+    // Folder navigation
+    list.querySelectorAll("[data-dir]").forEach(a => {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        const name = a.getAttribute("data-dir");
+        navigate(join(ctx.path, name));
+      });
+    });
+  }
+
+  // ---------- Data layer ----------
+  async function getDir(owner, repo, branch, path) {
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
+    const res = await fetch(url, { headers: { "Accept": "application/vnd.github.v3+json" }});
+    if (!res.ok) throw new Error(`Failed to load: ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error("Not a directory");
+    // sort: dirs first, then files, alpha
+    data.sort((a,b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "dir" ? -1 : 1));
+    // optional: fetch updated times with a light touch (skip to reduce rate hits)
+    return data.map(x => ({ name: x.name, type: x.type, size: x.size, path: x.path }));
+  }
+
+  // ---------- Search filter ----------
+  function fuzzyContains(hay, needle) {
+    hay = hay.toLowerCase(); needle = needle.toLowerCase();
+    let i = 0; for (const c of hay) { if (c === needle[i]) i++; if (i === needle.length) return true; }
+    return needle === "" || hay.includes(needle);
+  }
+
+  // ---------- Navigation ----------
+  let context = { owner: "", repo: "", branch: "", path: "" };
+  let cache = new Map(); // path -> items
+
+  async function navigate(path) {
+    context.path = decode(path || "");
+    renderBreadcrumbs(context.path, navigate);
+    $("upBtn").disabled = context.path === "";
+    $("rootBtn").disabled = context.path === "";
+    $("viewRawLink").href = `https://api.github.com/repos/${context.owner}/${context.repo}/contents/${encodeURIComponent(context.path)}?ref=${encodeURIComponent(context.branch)}`;
+
+    try {
+      const key = `${context.branch}:${context.path}`;
+      let items = cache.get(key);
+      if (!items) {
+        items = await getDir(context.owner, context.repo, context.branch, context.path);
+        cache.set(key, items);
+      }
+      applyFilterAndRender(items);
+    } catch (e) {
+      $("list").innerHTML = `<div class="empty">Error: ${e.message}. Ensure the repo/branch/path exists and is public.</div>`;
+    }
+  }
+
+  function applyFilterAndRender(items) {
+    const q = $("search").value.trim();
+    const filtered = q ? items.filter(x => fuzzyContains(x.name, q)) : items;
+    renderList(filtered, context);
+  }
+
+  // ---------- Init ----------
+  (async function init() {
+    const { owner, repo, branch: branchPref } = inferRepo();
+    if (!owner || !repo) {
+      $("title").textContent = "GitHub Pages File Browser (Needs owner/repo)";
+      $("list").innerHTML = `<div class="empty">Unable to infer <strong>owner</strong> and <strong>repo</strong> from this domain.
+      Add query params like <code class="inline">?owner=YOUR_USER&amp;repo=YOUR_REPO</code> (and optional <code class="inline">&amp;branch=main</code>), then reload.</div>`;
+      return;
+    }
+    const chosenBranch = await pickBranch(owner, repo, branchPref);
+    if (!chosenBranch) {
+      $("list").innerHTML = `<div class="empty">Could not determine branch. Please specify <code class="inline">?branch=main</code> (or your branch name) in the URL.</div>`;
+      return;
+    }
+
+    context.owner = owner; context.repo = repo; context.branch = chosenBranch; context.path = "";
+    $("repo-pill").textContent = `${owner}/${repo}`;
+    $("branch-pill").textContent = `@ ${chosenBranch}`;
+    $("limitNote").textContent = "Unauthenticated API ~60 req/hr per IP";
+    $("search").addEventListener("input", () => applyFilterAndRender(cache.get(`${context.branch}:${context.path}`) || []));
+    $("upBtn").addEventListener("click", () => {
+      const parts = context.path.split("/").filter(Boolean);
+      parts.pop(); navigate(parts.join("/"));
+    });
+    $("rootBtn").addEventListener("click", () => navigate(""));
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { $("search").value = ""; applyFilterAndRender(cache.get(`${context.branch}:${context.path}`) || []); }
+    });
+
+    navigate("");
+  })();
+})();
+</script>
+</body>
+</html>
