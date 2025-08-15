@@ -3,53 +3,139 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Repo Browser — IndexedDB Cache</title>
+  <title>Repo Browser — Dark by default</title>
   <meta name="referrer" content="no-referrer" />
   <style>
-    :root{--maxw:1200px;--gap:12px;--muted:#6b7280;--accent:#0f62fe;--radius:12px;--ui-font:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
-    *{box-sizing:border-box} body{margin:0;font-family:var(--ui-font);background:linear-gradient(#f7f9fc,#fff);padding:28px;display:flex;justify-content:center}
-    .shell{width:100%;max-width:var(--maxw);border-radius:14px;background:#fff;border:1px solid rgba(16,24,40,0.04);box-shadow:0 12px 30px rgba(16,24,40,0.06);overflow:hidden}
-    header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid rgba(16,24,40,0.03)}
-    .brand{display:flex;gap:12px;align-items:center}
-    .logo{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;color:white;background:linear-gradient(135deg,var(--accent),#7c3aed);font-weight:700}
-    .title{font-weight:600}
-    .controls{display:flex;gap:8px;align-items:center}
-    .search{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid rgba(16,24,40,0.04);min-width:220px}
-    .search input{border:0;background:transparent;outline:0;width:240px}
-    .btn{padding:8px 10px;border-radius:10px;border:1px solid rgba(16,24,40,0.06);background:#fff;cursor:pointer}
-    .pill{padding:6px 10px;border-radius:999px;border:1px solid rgba(16,24,40,0.04);background:transparent;color:var(--muted)}
-    .content{display:grid;grid-template-columns:1fr 420px;gap:18px;padding:18px}
-    @media(max-width:1000px){.content{grid-template-columns:1fr}}
-    .explorer{padding:12px;border-radius:12px;background:linear-gradient(180deg,#fff,#fbfdff);min-height:360px}
-    .crumbs{font-size:13px;color:var(--muted);margin-bottom:8px;word-break:break-all}
-    .controls-inline{display:flex;gap:8px;align-items:center;margin-bottom:10px}
-    .list{border-radius:10px;border:1px solid rgba(16,24,40,0.03);overflow:hidden}
-    .list .head{display:grid;grid-template-columns:38px 1fr 110px 120px;padding:12px 14px;color:var(--muted);font-size:13px;border-bottom:1px solid rgba(16,24,40,0.03)}
-    .rows{max-height:520px;overflow:auto}
-    .row{display:grid;grid-template-columns:38px 1fr 110px 120px;padding:12px 14px;border-top:1px solid rgba(16,24,40,0.02);align-items:center}
-    .row:hover{background:linear-gradient(90deg, rgba(15,98,254,0.02), transparent)}
-    .name strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .ic{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:rgba(15,98,254,0.04);color:var(--accent);font-weight:600}
-    .preview{padding:14px;border-radius:12px;background:linear-gradient(180deg,#fff,#fbfdff);min-height:360px;display:flex;flex-direction:column}
-    .preview-body{flex:1;overflow:auto;border-radius:8px;padding:10px;border:1px dashed rgba(16,24,40,0.04);background:#fff}
-    pre.code{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,'Roboto Mono',monospace;font-size:13px}
-    .muted-sm{font-size:12px;color:var(--muted)}
-    .spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(0,0,0,0.08);border-top-color:var(--accent);animation:spin 1s linear infinite;display:inline-block}
+    /* Fluid base size */
+    html { font-size: clamp(13px, 1.25vw, 18px); box-sizing: border-box; }
+    *,*::before,*::after{box-sizing:inherit}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+      background: var(--bg);
+      color: var(--text);
+      display:flex; align-items:flex-start; justify-content:center;
+      padding: clamp(12px, 2.2vw, 32px);
+      transition: background .18s, color .18s;
+    }
+
+    /* Theme variables (dark default) */
+    :root{
+      --bg: #0b0f15;
+      --panel: linear-gradient(180deg, #0f1720, #0b1117);
+      --muted: #9aa4b2;
+      --accent: #58a6ff;
+      --accent-2: #7c3aed;
+      --card-bg: rgba(255,255,255,0.02);
+      --border: rgba(255,255,255,0.06);
+      --text: #e6eef8;
+      --glass: rgba(255,255,255,0.02);
+      --radius: 12px;
+      --shadow: 0 8px 30px rgba(2,6,23,0.6);
+      --btn-bg: rgba(255,255,255,0.03);
+      --btn-border: rgba(255,255,255,0.04);
+      --maxw: 1200px;
+    }
+
+    /* Light theme overrides */
+    :root[data-theme="light"]{
+      --bg: linear-gradient(180deg,#f7f9fc,#ffffff);
+      --panel: linear-gradient(180deg,#ffffff,#fbfdff);
+      --muted: #6b7280;
+      --accent: #0f62fe;
+      --accent-2: #7c3aed;
+      --card-bg: rgba(8,12,20,0.02);
+      --border: rgba(16,24,40,0.06);
+      --text: #0b1220;
+      --glass: rgba(0,0,0,0.03);
+      --shadow: 0 10px 30px rgba(16,24,40,0.06);
+      --btn-bg: #fff;
+      --btn-border: rgba(16,24,40,0.06);
+    }
+
+    /* Shell */
+    .shell{
+      width: min(98vw, var(--maxw));
+      border-radius: calc(var(--radius) + 4px);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    header{
+      display:flex;align-items:center;justify-content:space-between;padding:1rem 1.1rem;border-bottom:1px solid rgba(255,255,255,0.02);
+      gap:clamp(8px,1.2vw,20px);
+    }
+    .brand{display:flex;gap:0.75rem;align-items:center}
+    .logo{width:3rem;height:3rem;border-radius:10px;display:grid;place-items:center;color:white;font-weight:700;
+      background: linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 6px 18px rgba(8,12,20,0.25)}
+    .title{font-weight:700;font-size:1.05rem}
+    .sub{font-size:0.85rem;color:var(--muted)}
+
+    /* Controls */
+    .controls{display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap}
+    .search{display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0.75rem;border-radius:999px;background:var(--glass);border:1px solid var(--btn-border);min-width:12rem}
+    .search input{background:transparent;border:0;outline:0;color:var(--text);width:18rem;font-size:0.95rem}
+    .btn{padding:0.45rem 0.65rem;border-radius:10px;border:1px solid var(--btn-border);background:var(--btn-bg);color:var(--text);cursor:pointer;font-size:0.95rem}
+    .pill{padding:0.35rem 0.6rem;border-radius:999px;border:1px solid var(--btn-border);background:transparent;color:var(--muted);font-size:0.9rem}
+
+    /* Layout */
+    .content{display:grid;grid-template-columns: 1fr 22.5rem;gap:clamp(12px,2vw,20px);padding:clamp(12px,2vw,18px)}
+    @media (max-width:1100px){ .content{grid-template-columns:1fr} .preview{order:2} }
+
+    .explorer{padding:0.9rem;border-radius:calc(var(--radius));background:var(--card-bg);border:1px solid rgba(255,255,255,0.02)}
+    .crumbs{font-size:0.95rem;color:var(--muted);margin-bottom:0.6rem;word-break:break-all}
+
+    .controls-inline{display:flex;gap:0.6rem;align-items:center;margin-bottom:0.6rem}
+
+    .list{border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.02);background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent)}
+    .list .head{display:grid;grid-template-columns:38px 1fr 9rem 9.5rem;padding:0.7rem 0.9rem;color:var(--muted);font-size:0.95rem;border-bottom:1px solid rgba(255,255,255,0.02)}
+    .rows{max-height:52vh;overflow:auto}
+    .row{display:grid;grid-template-columns:38px 1fr 9rem 9.5rem;padding:0.7rem 0.9rem;border-top:1px solid rgba(255,255,255,0.02);align-items:center;gap:0.6rem}
+    .row:hover{background:linear-gradient(90deg, rgba(88,166,255,0.03), transparent)}
+    .name strong{font-size:0.98rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ic{width:2rem;height:2rem;border-radius:8px;display:grid;place-items:center;background:rgba(88,166,255,0.04);color:var(--accent);font-weight:600}
+
+    .preview{padding:0.9rem;border-radius:calc(var(--radius));background:var(--card-bg);border:1px solid rgba(255,255,255,0.02);display:flex;flex-direction:column;gap:0.6rem;min-height:40vh}
+    .preview-body{flex:1;overflow:auto;border-radius:10px;padding:0.6rem;border:1px dashed rgba(255,255,255,0.02);background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent)}
+    pre.code{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,"Roboto Mono",monospace;font-size:0.9rem;margin:0;color:var(--text)}
+    .muted-sm{font-size:0.88rem;color:var(--muted)}
+
+    /* Floating theme toggle — big, bottom-right */
+    #themeToggle{
+      position:fixed;right:clamp(12px,2.2vw,28px);bottom:clamp(12px,2.2vw,28px);
+      width:clamp(52px,6.2vw,72px);height:clamp(52px,6.2vw,72px);border-radius:999px;
+      display:grid;place-items:center;z-index:1200;border:0;cursor:pointer;
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.05));
+      box-shadow: 0 10px 30px rgba(2,6,23,0.45);
+      color: var(--text); font-size:1.15rem;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    #themeToggle svg{width:56%;height:56%}
+    #themeToggle:focus{outline:3px solid rgba(88,166,255,0.18);outline-offset:3px}
+
+    /* small helpers */
+    .inline{color:var(--accent)}
+    .spinner{width:1rem;height:1rem;border-radius:50%;border:2px solid rgba(255,255,255,0.06);border-top-color:var(--accent);animation:spin 1s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
+    code.inline{background:rgba(0,0,0,0.06);padding:2px 6px;border-radius:6px;color:var(--text)}
   </style>
 </head>
 <body>
   <div class="shell" id="app" data-owner="" data-repo="" data-branch="">
     <header>
       <div class="brand">
-        <div class="logo">RB</div>
+        <div class="logo" aria-hidden="true">RB</div>
         <div>
           <div class="title">Repo Browser</div>
-          <div class="muted-sm" id="repoSub">—</div>
+          <div class="sub" id="repoSub">—</div>
         </div>
       </div>
+
       <div class="controls" role="region" aria-label="controls">
-        <div class="search" title="Filter (f focuses)">
+        <div class="search" title="Filter (press F)">
           <input id="q" placeholder="Filter (ext:css or text)" aria-label="search" />
           <div class="pill muted-sm" id="statsPill">—</div>
         </div>
@@ -66,7 +152,7 @@
 
         <div class="controls-inline">
           <div class="pill muted-sm" id="branchPill">branch: —</div>
-          <div style="margin-left:auto;display:flex;gap:8px">
+          <div style="margin-left:auto;display:flex;gap:0.5rem">
             <select id="sort" class="pill" title="Sort">
               <option value="name">name</option><option value="type">type</option><option value="size">size</option>
             </select>
@@ -79,7 +165,7 @@
           <div class="rows" id="rows"></div>
         </div>
 
-        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+        <div style="margin-top:0.8rem;display:flex;gap:0.6rem;align-items:center">
           <a id="apiLink" class="muted-sm inline" target="_blank" rel="noopener">API</a>
           <div class="muted-sm" style="margin-left:auto" id="limitNote">Unauthenticated ~60 req/hr</div>
         </div>
@@ -88,31 +174,66 @@
       <aside class="preview">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div>
-            <div id="previewTitle" style="font-weight:600">Select a file or folder</div>
+            <div id="previewTitle" style="font-weight:700">Select a file or folder</div>
             <div class="muted-sm" id="previewSub">—</div>
           </div>
-          <div class="actions" id="previewActions"></div>
+          <div id="previewActions"></div>
         </div>
+
         <div class="preview-body" id="previewBody"><div class="muted-sm">No preview</div></div>
         <div class="muted-sm" id="metaFooter">—</div>
       </aside>
     </div>
   </div>
 
-<script>
-/*
-  IndexedDB caching + repo SHA check.
-  - Key structure:
-      repoKey = owner:repo:branch
-      dirKey  = repoKey:path  -> { items, fetchedAt }
-      metaKey = repoKey:meta  -> { latestSha, checkedAt }
-      rawKey  = repoKey:raw:path -> { text, fetchedAt }
-      sizeKey = repoKey:size:path -> sizeNumber
-  - Decision: before using cached dir, fetch latest branch SHA and compare to meta.latestSha.
-    If matched -> use cache. If different -> fetch fresh and update cache.
-*/
+  <!-- Theme toggle — large and visible -->
+  <button id="themeToggle" aria-label="Toggle color theme" title="Toggle theme (press T)">
+    <!-- default: show sun (we start dark, so show sun to switch to light) -->
+    <svg id="iconSun" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.4" />
+      <path d="M12 2v1.8M12 20.2V22M4.22 4.22l1.27 1.27M18.51 18.51l1.27 1.27M2 12h1.8M20.2 12H22M4.22 19.78l1.27-1.27M18.51 5.49l1.27-1.27" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    <svg id="iconMoon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden style="display:none">
+      <path d="M21 12.79A9 9 0 0111.21 3 7 7 0 0021 12.79z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
 
-/* --------- Helpers --------- */
+<script>
+/* ====== THEME: default dark; toggle to light, remember in localStorage ====== */
+(function themeInit(){
+  const stored = localStorage.getItem('rb-theme'); // 'dark'|'light'
+  const prefers = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches;
+  const initial = stored || (prefers ? 'dark' : 'dark'); // force dark default per request
+  document.documentElement.setAttribute('data-theme', initial === 'light' ? 'light' : '');
+  // toggle button
+  const btn = document.getElementById('themeToggle');
+  const iconSun = document.getElementById('iconSun');
+  const iconMoon = document.getElementById('iconMoon');
+  function updateIcons(){
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    iconSun.style.display = isLight ? 'none' : 'block'; // show sun when current is dark (sun to switch to light)
+    iconMoon.style.display = isLight ? 'block' : 'none';
+    btn.setAttribute('aria-pressed', String(isLight));
+  }
+  updateIcons();
+  btn.addEventListener('click', () => {
+    const currentIsLight = document.documentElement.getAttribute('data-theme') === 'light';
+    if(currentIsLight){
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('rb-theme','dark');
+    } else {
+      document.documentElement.setAttribute('data-theme','light');
+      localStorage.setItem('rb-theme','light');
+    }
+    updateIcons();
+  });
+  // keyboard: T toggles
+  window.addEventListener('keydown', (e) => { if(e.key.toLowerCase() === 't') { btn.click(); } });
+})();
+
+/* ====== Rest of app (IndexedDB + repo browser) ====== */
+/* NOTE: This is the same caching+logic used previously (lightly trimmed for concision). */
+
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const appEl = document.getElementById('app');
@@ -138,145 +259,65 @@ function mkIcon(type,name){
   return '<div class="ic">📄</div>';
 }
 
-/* --------- API url helpers --------- */
 function apiContentsUrl(owner,repo,path,branch){
   const p = path ? '/' + encodeURIComponent(path).replace(/%2F/g,'/') : '';
   return `https://api.github.com/repos/${owner}/${repo}/contents${p}?ref=${encodeURIComponent(branch)}`;
 }
 function apiCommitsLatestUrl(owner,repo,branch){
-  // returns latest commit on branch (repo-level)
   return `https://api.github.com/repos/${owner}/${repo}/commits?per_page=1&sha=${encodeURIComponent(branch)}`;
 }
 function rawUrl(owner,repo,branch,path){
   return `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${path}`;
 }
 
-/* --------- IndexedDB tiny wrapper --------- */
+/* IndexedDB wrapper */
 const IDB_NAME = 'repo-browser-db';
 const IDB_VERSION = 1;
 const IDB_STORE = 'kv';
+function openIdb(){ return new Promise((resolve,reject)=>{ const r=indexedDB.open(IDB_NAME,IDB_VERSION); r.onupgradeneeded=(e)=>{ const db=e.target.result; if(!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE,{keyPath:'k'}); }; r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error); }); }
+async function idbGet(k){ try{ const db=await openIdb(); return await new Promise((res,rej)=>{ const tx=db.transaction(IDB_STORE,'readonly'); const st=tx.objectStore(IDB_STORE); const r=st.get(k); r.onsuccess=()=>res(r.result ? r.result.v : undefined); r.onerror=()=>rej(r.error); }); }catch(e){return undefined;} }
+async function idbPut(k,v){ try{ const db=await openIdb(); return await new Promise((res,rej)=>{ const tx=db.transaction(IDB_STORE,'readwrite'); const st=tx.objectStore(IDB_STORE); const r=st.put({k,v}); r.onsuccess=()=>res(true); r.onerror=()=>rej(r.error); }); }catch(e){return false;} }
+async function idbDel(k){ try{ const db=await openIdb(); return await new Promise((res,rej)=>{ const tx=db.transaction(IDB_STORE,'readwrite'); const st=tx.objectStore(IDB_STORE); const r=st.delete(k); r.onsuccess=()=>res(true); r.onerror=()=>rej(r.error); }); }catch(e){return false;} }
 
-function openIdb(){
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if(!db.objectStoreNames.contains(IDB_STORE)){
-        db.createObjectStore(IDB_STORE, { keyPath: 'k' });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-async function idbGet(k){
-  try{
-    const db = await openIdb();
-    return new Promise((res, rej) => {
-      const tx = db.transaction(IDB_STORE, 'readonly');
-      const st = tx.objectStore(IDB_STORE);
-      const r = st.get(k);
-      r.onsuccess = () => res(r.result ? r.result.v : undefined);
-      r.onerror = () => rej(r.error);
-    });
-  }catch(e){ return undefined; }
-}
-async function idbPut(k,v){
-  try{
-    const db = await openIdb();
-    return new Promise((res, rej) => {
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      const st = tx.objectStore(IDB_STORE);
-      const r = st.put({ k, v });
-      r.onsuccess = () => res(true);
-      r.onerror = () => rej(r.error);
-    });
-  }catch(e){ return false; }
-}
-async function idbDel(k){
-  try{
-    const db = await openIdb();
-    return new Promise((res, rej) => {
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      const st = tx.objectStore(IDB_STORE);
-      const r = st.delete(k);
-      r.onsuccess = () => res(true);
-      r.onerror = () => rej(r.error);
-    });
-  }catch(e){ return false; }
-}
-
-/* --------- State & cache maps --------- */
+/* State */
 let state = { owner:'', repo:'', branch:'', path:'' };
 
-/* --------- UI small helpers --------- */
-function setHeader(owner,repo,branch){
-  $('repoPill').textContent = `${owner}/${repo}`;
-  $('repoSub').textContent = `${owner}/${repo}`;
-  $('branchPill').textContent = `branch: ${branch}`;
-}
-function setApiLink(path){
-  const url = apiContentsUrl(state.owner,state.repo,path || '',state.branch);
-  $('apiLink').href = url;
-  $('apiLink').textContent = url.replace('https://api.github.com/','');
-}
+/* UI helpers */
+function setHeader(owner,repo,branch){ $('repoPill').textContent = `${owner}/${repo}`; $('repoSub').textContent = `${owner}/${repo}`; $('branchPill').textContent = `branch: ${branch}`; }
+function setApiLink(path){ const url = apiContentsUrl(state.owner,state.repo,path || '',state.branch); $('apiLink').href = url; $('apiLink').textContent = url.replace('https://api.github.com/',''); }
 
-/* --------- Get latest branch SHA --------- */
 async function fetchLatestBranchSha(){
-  try{
-    const url = apiCommitsLatestUrl(state.owner,state.repo,state.branch);
-    const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }});
-    if(!res.ok) return null;
-    const arr = await res.json();
-    return arr && arr[0] && arr[0].sha ? arr[0].sha : null;
-  }catch(e){ return null; }
+  try{ const url = apiCommitsLatestUrl(state.owner,state.repo,state.branch); const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }}); if(!res.ok) return null; const arr = await res.json(); return arr && arr[0] && arr[0].sha ? arr[0].sha : null; }catch(e){ return null; }
 }
 
-/* --------- Fetch dir with cache/sha validation --------- */
 async function fetchDirWithCache(path){
   const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
   const dirKey = `${repoKey}:dir:${path || ''}`;
   const metaKey = `${repoKey}:meta`;
-
-  // 1) get cached dir and cached meta
   const cachedDir = await idbGet(dirKey);
   const cachedMeta = await idbGet(metaKey);
-
-  // 2) get latest SHA for branch
   let latestSha = null;
-  try { latestSha = await fetchLatestBranchSha(); } catch(e){ latestSha = null; }
-
-  // If we have cachedDir and cachedMeta.latestSha === latestSha -> use cache
+  try{ latestSha = await fetchLatestBranchSha(); }catch(e){ latestSha = null; }
   if(cachedDir && cachedMeta && cachedMeta.latestSha && latestSha && cachedMeta.latestSha === latestSha){
-    // use cached
     return { items: cachedDir.items, fromCache: true, latestSha };
   }
-
-  // else, fetch fresh from API, update both dirKey and metaKey
   const url = apiContentsUrl(state.owner,state.repo,path || '',state.branch);
   const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }});
   if(!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
   const data = await res.json();
   if(!Array.isArray(data)) throw new Error('Not a directory');
-
-  data.sort((a,b) => (a.type === b.type ? a.name.localeCompare(b.name, undefined, {numeric:true}) : (a.type === 'dir' ? -1 : 1)));
-  const normalized = data.map(x => ({ name: x.name, path: x.path, type: x.type, size: x.size || 0, sha: x.sha, url: x.url, download_url: x.download_url }));
-
-  // Store fresh data and meta (include latestSha if available)
+  data.sort((a,b)=>(a.type===b.type ? a.name.localeCompare(b.name,undefined,{numeric:true}) : a.type==='dir' ? -1 : 1));
+  const normalized = data.map(x=>({ name:x.name, path:x.path, type:x.type, size:x.size||0, sha:x.sha, url:x.url, download_url:x.download_url }));
   await idbPut(dirKey, { items: normalized, fetchedAt: Date.now() });
   if(latestSha) await idbPut(metaKey, { latestSha, checkedAt: Date.now() });
-
-  return { items: normalized, fromCache: false, latestSha };
+  return { items: normalized, fromCache:false, latestSha };
 }
 
-/* --------- Fetch raw with cache --------- */
 async function fetchRawTextWithCache(path){
   const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
   const rawKey = `${repoKey}:raw:${path}`;
   const cached = await idbGet(rawKey);
-  if(cached && (Date.now() - (cached.fetchedAt||0) < 1000 * 60 * 60 * 24)) { // 24h fresh
-    return { text: cached.text, fromCache: true };
-  }
+  if(cached && (Date.now() - (cached.fetchedAt||0) < 1000 * 60 * 60 * 24)) return { text: cached.text, fromCache: true };
   const raw = rawUrl(state.owner,state.repo,state.branch,path);
   const res = await fetch(raw);
   if(!res.ok) throw new Error('raw fetch failed');
@@ -285,14 +326,9 @@ async function fetchRawTextWithCache(path){
   return { text: txt, fromCache: false };
 }
 
-/* --------- Render rows --------- */
 function renderRows(items){
   const rows = $('rows');
-  if(!items || items.length === 0){
-    rows.innerHTML = '<div class="row"><div style="grid-column:1/-1;color:var(--muted)">Empty</div></div>';
-    $('statsPill').textContent = '0 items';
-    return;
-  }
+  if(!items || items.length === 0){ rows.innerHTML = '<div class="row"><div style="grid-column:1/-1;color:var(--muted)">Empty</div></div>'; $('statsPill').textContent = '0 items'; return; }
   const sizeSum = items.reduce((s,i)=> s + (i.type==='file' ? (i.size||0) : 0), 0);
   $('statsPill').textContent = `${items.length} • ${fmtBytes(sizeSum)}`;
   rows.innerHTML = items.map(it => {
@@ -305,22 +341,14 @@ function renderRows(items){
       <div class="muted-sm" data-updated></div>
     </div>`;
   }).join('');
-
-  // attach listeners & fetch commit metadata lazily
-  rows.querySelectorAll('.row').forEach(r => {
-    r.addEventListener('click', (ev) => {
-      const path = r.getAttribute('data-path');
-      const type = r.getAttribute('data-type');
-      if(ev.detail === 2){
-        if(type === 'dir') return navigate(path);
-        window.open(rawUrl(state.owner,state.repo,state.branch,path),'_blank');
-        return;
-      }
-      showPreview(path, type);
+  rows.querySelectorAll('.row').forEach(r=>{
+    r.addEventListener('click',(ev)=>{
+      const path=r.getAttribute('data-path'); const type=r.getAttribute('data-type');
+      if(ev.detail===2){ if(type==='dir') return navigate(path); window.open(rawUrl(state.owner,state.repo,state.branch,path),'_blank'); return; }
+      showPreview(path,type);
     });
     const p = r.getAttribute('data-path');
-    // fetch last commit for this path (lazy)
-    (async () => {
+    (async ()=> {
       try{
         const url = `https://api.github.com/repos/${state.owner}/${state.repo}/commits?path=${encodeURIComponent(p)}&per_page=1&sha=${encodeURIComponent(state.branch)}`;
         const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }});
@@ -328,78 +356,54 @@ function renderRows(items){
         const arr = await res.json();
         if(arr && arr[0] && arr[0].commit && arr[0].commit.committer){
           const d = new Date(arr[0].commit.committer.date);
-          const upd = r.querySelector('[data-updated]');
-          if(upd) upd.textContent = d.toLocaleString();
+          const upd = r.querySelector('[data-updated]'); if(upd) upd.textContent = d.toLocaleString();
         }
       }catch(e){}
     })();
   });
 }
 
-/* --------- Preview --------- */
-async function showPreview(path, type){
+async function showPreview(path,type){
   $('previewTitle').textContent = path.split('/').pop();
-  $('previewSub').textContent = `${type} • ${path}`;
-  $('previewActions').innerHTML = '';
+  $('previewSub').textContent = `${type} • ${path}`; $('previewActions').innerHTML = '';
   setApiLink(path);
-
-  if(type === 'dir'){
-    $('previewBody').innerHTML = `<div style="padding:18px">Folder: <strong>${safe(path)}</strong></div>`;
-    $('previewActions').appendChild(createBtn('Open', () => navigate(path)));
-    $('previewActions').appendChild(createBtn('Open GitHub', () => window.open(`https://github.com/${state.owner}/${state.repo}/tree/${state.branch}/${path}`,'_blank')));
+  if(type==='dir'){
+    $('previewBody').innerHTML = `<div style="padding:0.7rem">Folder: <strong>${safe(path)}</strong></div>`;
+    $('previewActions').appendChild(createBtn('Open', ()=> navigate(path)));
+    $('previewActions').appendChild(createBtn('GitHub', ()=> window.open(`https://github.com/${state.owner}/${state.repo}/tree/${state.branch}/${path}`,'_blank')));
     const commit = await fetchLastCommit(path);
     $('metaFooter').textContent = commit ? `${commit.author} • ${new Date(commit.date).toLocaleString()} • ${commit.message}` : '—';
     return;
   }
-
-  // file
   const raw = rawUrl(state.owner,state.repo,state.branch,path);
   $('previewActions').appendChild(createBtn('Raw', ()=> window.open(raw,'_blank')));
   $('previewActions').appendChild(createBtn('Copy path', ()=> navigator.clipboard?.writeText(path).then(()=>alert('copied')).catch(()=>alert('copy failed'))));
-
   if(isImageExt(extOf(path))){
     $('previewBody').innerHTML = `<img src="${raw}" alt="${safe(path)}" style="max-width:100%;display:block;margin:auto;border-radius:8px"/>`;
   } else if(isTextExt(extOf(path))){
     $('previewBody').innerHTML = '<div class="muted-sm">Loading… <span class="spinner"></span></div>';
-    try{
-      const r = await fetchRawTextWithCache(path);
-      $('previewBody').innerHTML = `<pre class="code">${escapeHtml(r.text)}</pre>`;
-    }catch(e){
-      $('previewBody').innerHTML = `<div class="muted-sm">Preview unavailable</div>`;
-    }
-  } else {
-    $('previewBody').innerHTML = `<div class="muted-sm">No preview</div>`;
-  }
-
+    try{ const r = await fetchRawTextWithCache(path); $('previewBody').innerHTML = `<pre class="code">${escapeHtml(r.text)}</pre>`; }catch(e){ $('previewBody').innerHTML = `<div class="muted-sm">Preview unavailable</div>`; }
+  } else { $('previewBody').innerHTML = `<div class="muted-sm">No preview</div>`; }
   const commit = await fetchLastCommit(path);
   $('metaFooter').textContent = commit ? `${commit.author} • ${new Date(commit.date).toLocaleString()} • ${commit.message}` : '—';
 }
+
 function createBtn(label, onClick){ const b=document.createElement('button'); b.className='btn'; b.textContent=label; b.addEventListener('click', onClick); return b; }
 function escapeHtml(s){ return safe(s).replace(/&lt;/g,'&lt;').replace(/&gt;/g,'&gt;'); }
 
-/* --------- fetch last commit for arbitrary path --------- */
 async function fetchLastCommit(path){
   try{
     const url = `https://api.github.com/repos/${state.owner}/${state.repo}/commits?path=${encodeURIComponent(path)}&per_page=1&sha=${encodeURIComponent(state.branch)}`;
     const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }});
     if(!res.ok) return null;
     const arr = await res.json();
-    if(arr && arr[0]){
-      return {
-        sha: arr[0].sha,
-        date: arr[0].commit.committer.date,
-        message: arr[0].commit.message,
-        author: arr[0].commit.author ? arr[0].commit.author.name : (arr[0].author ? arr[0].author.login : '')
-      };
-    }
+    if(arr && arr[0]) return { sha: arr[0].sha, date: arr[0].commit.committer.date, message: arr[0].commit.message, author: arr[0].commit.author ? arr[0].commit.author.name : (arr[0].author ? arr[0].author.login : '') };
     return null;
   }catch(e){ return null; }
 }
 
-/* --------- compute folder size (recursive) --------- */
 async function computeFolderSize(path){
-  // cautious: this makes many API calls; ask user
-  if(!confirm('Compute sizes recursively? This may make many API calls.')) throw new Error('cancel');
+  if(!confirm('Compute sizes recursively? This may use many API calls.')) throw new Error('cancel');
   let total = 0;
   async function walk(p){
     const url = apiContentsUrl(state.owner,state.repo,p || '',state.branch);
@@ -407,10 +411,7 @@ async function computeFolderSize(path){
     if(!res.ok) throw new Error('API error');
     const arr = await res.json();
     if(!Array.isArray(arr)) return;
-    for(const e of arr){
-      if(e.type === 'file') total += e.size || 0;
-      else if(e.type === 'dir') await walk(e.path);
-    }
+    for(const e of arr){ if(e.type==='file') total += e.size || 0; else if(e.type==='dir') await walk(e.path); }
   }
   await walk(path || '');
   const sizeKey = `${state.owner}:${state.repo}:${state.branch}:size:${path || ''}`;
@@ -418,48 +419,39 @@ async function computeFolderSize(path){
   return total;
 }
 
-/* --------- Navigation & render pipeline --------- */
 async function navigate(path){
   state.path = (path || '').replace(/^\/+|\/+$/g,'');
   $('breadcrumbs').textContent = '/' + (state.path || '');
   setApiLink(state.path);
-  $('upBtn').disabled = !state.path;
-  $('rootBtn').disabled = !state.path;
+  $('upBtn').disabled = !state.path; $('rootBtn').disabled = !state.path;
   try{
     const res = await fetchDirWithCache(state.path);
-    const items = res.items;
-    // store latestSha to meta if returned
-    if(res.latestSha){
-      const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
-      await idbPut(`${repoKey}:meta`, { latestSha: res.latestSha, checkedAt: Date.now() });
-    }
-    renderCurrent(items);
+    if(res.latestSha){ const repoKey = `${state.owner}:${state.repo}:${state.branch}`; await idbPut(`${repoKey}:meta`, { latestSha: res.latestSha, checkedAt: Date.now() }); }
+    renderCurrent(res.items);
   }catch(err){
-    $('rows').innerHTML = `<div class="row"><div style="grid-column:1/-1;color:#912a3a;padding:12px">Error: ${err.message}</div></div>`;
+    $('rows').innerHTML = `<div class="row"><div style="grid-column:1/-1;color:#e06a6a;padding:12px">Error: ${err.message}</div></div>`;
   }
 }
+
 function renderCurrent(items){
-  // filter
   const q = ($('q').value || '').trim().toLowerCase();
   const filtered = (items || []).filter(it => {
     if(!q) return true;
     if(q.startsWith('ext:')) return extOf(it.name) === q.slice(4);
     return it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q);
   });
-  // sort
   const sorter = $('sort').value;
-  filtered.sort((a,b) => {
-    if(sorter==='name') return a.name.localeCompare(b.name, undefined, {numeric:true});
-    if(sorter==='type'){ if(a.type === b.type) return a.name.localeCompare(b.name); return a.type==='dir' ? -1 : 1; }
+  filtered.sort((a,b)=>{
+    if(sorter==='name') return a.name.localeCompare(b.name,undefined,{numeric:true});
+    if(sorter==='type'){ if(a.type===b.type) return a.name.localeCompare(b.name); return a.type==='dir' ? -1 : 1; }
     if(sorter==='size') return (b.size||0) - (a.size||0);
     return 0;
   });
   renderRows(filtered);
 }
 
-/* --------- Initialization --------- */
+/* Initialization */
 (async function init(){
-  // infer owner/repo/branch
   let owner = qs.get('owner') || ownerFromApp;
   let repo = qs.get('repo') || repoFromApp;
   let branch = qs.get('branch') || branchFromApp;
@@ -480,22 +472,10 @@ function renderCurrent(items){
   setHeader(state.owner,state.repo,state.branch || 'detecting...');
   $('limitNote').textContent = 'Unauthenticated ~60 req/hr';
 
-  // detect branch: try pref, then main/master, then repo.default_branch
   async function detectBranch(pref){
     const candidates = []; if(pref) candidates.push(pref); candidates.push('main','master');
-    for(const br of candidates){
-      try{
-        const r = await fetch(apiContentsUrl(state.owner,state.repo,'',br), { headers:{ 'Accept':'application/vnd.github.v3+json' }});
-        if(r.ok) return br;
-      }catch(e){}
-    }
-    try{
-      const r = await fetch(`https://api.github.com/repos/${state.owner}/${state.repo}`, { headers:{ 'Accept':'application/vnd.github.v3+json' }});
-      if(r.ok){
-        const j = await r.json();
-        return j.default_branch || '';
-      }
-    }catch(e){}
+    for(const br of candidates){ try{ const r = await fetch(apiContentsUrl(state.owner,state.repo,'',br), { headers:{ 'Accept':'application/vnd.github.v3+json' }}); if(r.ok) return br; }catch(e){} }
+    try{ const r = await fetch(`https://api.github.com/repos/${state.owner}/${state.repo}`, { headers:{ 'Accept':'application/vnd.github.v3+json' }}); if(r.ok){ const j = await r.json(); return j.default_branch || ''; } }catch(e){}
     return '';
   }
 
@@ -506,12 +486,10 @@ function renderCurrent(items){
     setHeader(state.owner,state.repo,state.branch);
     await navigate('');
   }catch(e){
-    $('rows').innerHTML = `<div class="row"><div style="grid-column:1/-1;color:#912a3a;padding:12px">Init error: ${e.message}</div></div>`;
+    $('rows').innerHTML = `<div class="row"><div style="grid-column:1/-1;color:#e06a6a;padding:12px">Init error: ${e.message}</div></div>`;
   }
 
-  // wire controls
   $('q').addEventListener('input', () => {
-    // re-render from cached contents for this path
     const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
     const dirKey = `${repoKey}:dir:${state.path || ''}`;
     idbGet(dirKey).then(cached => renderCurrent(cached ? cached.items : []));
@@ -522,39 +500,19 @@ function renderCurrent(items){
     idbGet(dirKey).then(cached => renderCurrent(cached ? cached.items : []));
   });
   $('refreshBtn').addEventListener('click', async ()=> {
-    // clear cached dir for current path so next navigate fetches fresh
     const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
     const dirKey = `${repoKey}:dir:${state.path || ''}`;
     await idbDel(dirKey);
     await idbDel(`${repoKey}:meta`);
     await navigate(state.path);
   });
-  $('upBtn').addEventListener('click', ()=> {
-    if(!state.path) return;
-    const parts = state.path.split('/').filter(Boolean); parts.pop();
-    navigate(parts.join('/'));
-  });
+  $('upBtn').addEventListener('click', ()=> { if(!state.path) return; const parts = state.path.split('/').filter(Boolean); parts.pop(); navigate(parts.join('/')); });
   $('rootBtn').addEventListener('click', ()=> navigate(''));
-  $('computeBtn').addEventListener('click', async ()=>{
-    try{
-      $('computeBtn').disabled = true; $('computeBtn').textContent = 'Computing…';
-      const size = await computeFolderSize(state.path || '');
-      alert('Folder size: ' + fmtBytes(size));
-      // re-render to show potential size badges (if you want to display them)
-      const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
-      const dirKey = `${repoKey}:dir:${state.path || ''}`;
-      const cached = await idbGet(dirKey);
-      renderCurrent(cached ? cached.items : []);
-    }catch(e){}
-    finally { $('computeBtn').disabled = false; $('computeBtn').textContent = 'Compute sizes'; }
+  $('computeBtn').addEventListener('click', async ()=> {
+    try{ $('computeBtn').disabled = true; $('computeBtn').textContent = 'Computing…'; const size = await computeFolderSize(state.path || ''); alert('Folder size: ' + fmtBytes(size)); const repoKey = `${state.owner}:${state.repo}:${state.branch}`; const dirKey = `${repoKey}:dir:${state.path || ''}`; const cached = await idbGet(dirKey); renderCurrent(cached ? cached.items : []); }catch(e){} finally{ $('computeBtn').disabled=false; $('computeBtn').textContent='Compute sizes'; }
   });
 
-  // keyboard shortcuts
-  window.addEventListener('keydown', (e) => {
-    if(e.key === 'f' && document.activeElement.tagName !== 'INPUT'){ e.preventDefault(); $('q').focus(); }
-    if(e.key === 'Escape'){ $('q').value=''; const repoKey = `${state.owner}:${state.repo}:${state.branch}`; const dirKey = `${repoKey}:dir:${state.path || ''}`; idbGet(dirKey).then(c=> renderCurrent(c ? c.items : [])); }
-  });
-
+  window.addEventListener('keydown', (e) => { if(e.key === 'f' && document.activeElement.tagName !== 'INPUT'){ e.preventDefault(); $('q').focus(); } if(e.key === 'Escape'){ $('q').value=''; const repoKey = `${state.owner}:${state.repo}:${state.branch}`; const dirKey = `${repoKey}:dir:${state.path || ''}`; idbGet(dirKey).then(c=> renderCurrent(c ? c.items : [])); } });
 })();
 </script>
 </body>
