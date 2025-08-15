@@ -100,7 +100,6 @@
 
     .preview{padding:0.9rem;border-radius:calc(var(--radius));background:var(--card-bg);border:1px solid rgba(255,255,255,0.02);display:flex;flex-direction:column;gap:0.6rem;min-height:40vh}
     .preview-body{flex:1;overflow:auto;border-radius:10px;padding:0.6rem;border:1px dashed rgba(255,255,255,0.02);background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent)}
-    pre.code{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,"Roboto Mono",monospace;font-size:0.9rem;margin:0;color:var(--text)}
     .muted-sm{font-size:0.88rem;color:var(--muted)}
 
     /* Floating theme toggle — big, bottom-right */
@@ -116,11 +115,9 @@
     #themeToggle svg{width:56%;height:56%}
     #themeToggle:focus{outline:3px solid rgba(88,166,255,0.18);outline-offset:3px}
 
-    /* small helpers */
     .inline{color:var(--accent)}
     .spinner{width:1rem;height:1rem;border-radius:50%;border:2px solid rgba(255,255,255,0.06);border-top-color:var(--accent);animation:spin 1s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
-    code.inline{background:rgba(0,0,0,0.06);padding:2px 6px;border-radius:6px;color:var(--text)}
   </style>
 </head>
 <body>
@@ -180,7 +177,7 @@
           <div id="previewActions"></div>
         </div>
 
-        <div class="preview-body" id="previewBody"><div class="muted-sm">No preview</div></div>
+        <div class="preview-body" id="previewBody"><div class="muted-sm">Select an item to view metadata and open it on the site.</div></div>
         <div class="muted-sm" id="metaFooter">—</div>
       </aside>
     </div>
@@ -188,7 +185,6 @@
 
   <!-- Theme toggle — large and visible -->
   <button id="themeToggle" aria-label="Toggle color theme" title="Toggle theme (press T)">
-    <!-- default: show sun (we start dark, so show sun to switch to light) -->
     <svg id="iconSun" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
       <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.4" />
       <path d="M12 2v1.8M12 20.2V22M4.22 4.22l1.27 1.27M18.51 18.51l1.27 1.27M2 12h1.8M20.2 12H22M4.22 19.78l1.27-1.27M18.51 5.49l1.27-1.27" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
@@ -199,19 +195,17 @@
   </button>
 
 <script>
-/* ====== THEME: default dark; toggle to light, remember in localStorage ====== */
+/* THEME: default dark; toggle to light, remember in localStorage */
 (function themeInit(){
-  const stored = localStorage.getItem('rb-theme'); // 'dark'|'light'
-  const prefers = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches;
-  const initial = stored || (prefers ? 'dark' : 'dark'); // force dark default per request
-  document.documentElement.setAttribute('data-theme', initial === 'light' ? 'light' : '');
-  // toggle button
+  const stored = localStorage.getItem('rb-theme');
+  const initial = stored || 'dark';
+  if(initial === 'light') document.documentElement.setAttribute('data-theme','light');
   const btn = document.getElementById('themeToggle');
   const iconSun = document.getElementById('iconSun');
   const iconMoon = document.getElementById('iconMoon');
   function updateIcons(){
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    iconSun.style.display = isLight ? 'none' : 'block'; // show sun when current is dark (sun to switch to light)
+    iconSun.style.display = isLight ? 'none' : 'block';
     iconMoon.style.display = isLight ? 'block' : 'none';
     btn.setAttribute('aria-pressed', String(isLight));
   }
@@ -227,13 +221,10 @@
     }
     updateIcons();
   });
-  // keyboard: T toggles
   window.addEventListener('keydown', (e) => { if(e.key.toLowerCase() === 't') { btn.click(); } });
 })();
 
-/* ====== Rest of app (IndexedDB + repo browser) ====== */
-/* NOTE: This is the same caching+logic used previously (lightly trimmed for concision). */
-
+/* --- Repo browser (IndexedDB + SHA check) --- */
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const appEl = document.getElementById('app');
@@ -241,36 +232,27 @@ const ownerFromApp = appEl.dataset.owner || '';
 const repoFromApp = appEl.dataset.repo || '';
 const branchFromApp = appEl.dataset.branch || '';
 
-function fmtBytes(b){
-  if (b == null) return '';
-  if (b < 1024) return b + ' B';
-  if (b < 1024**2) return (b/1024).toFixed(1)+' KB';
-  if (b < 1024**3) return (b/1024**2).toFixed(1)+' MB';
-  return (b/1024**3).toFixed(2)+' GB';
-}
+function fmtBytes(b){ if (b == null) return ''; if (b < 1024) return b + ' B'; if (b < 1024**2) return (b/1024).toFixed(1)+' KB'; if (b < 1024**3) return (b/1024**2).toFixed(1)+' MB'; return (b/1024**3).toFixed(2)+' GB'; }
 function safe(s){ return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function extOf(name){ return (name.split('.').pop()||'').toLowerCase(); }
-function isTextExt(e){ return ['md','txt','js','ts','json','html','css','py','java','cs','yml','yaml','sh'].includes(e); }
 function isImageExt(e){ return ['png','jpg','jpeg','gif','webp','svg'].includes(e); }
-function mkIcon(type,name){
-  if(type==='dir') return '<div class="ic">📁</div>';
-  const e = extOf(name);
-  if(isImageExt(e)) return '<div class="ic">🖼</div>';
-  return '<div class="ic">📄</div>';
+function mkIcon(type,name){ if(type==='dir') return '<div class="ic">📁</div>'; const e=extOf(name); if(isImageExt(e)) return '<div class="ic">🖼</div>'; return '<div class="ic">📄</div>'; }
+
+function apiContentsUrl(owner,repo,path,branch){ const p = path ? '/' + encodeURIComponent(path).replace(/%2F/g,'/') : ''; return `https://api.github.com/repos/${owner}/${repo}/contents${p}?ref=${encodeURIComponent(branch)}`; }
+function apiCommitsLatestUrl(owner,repo,branch){ return `https://api.github.com/repos/${owner}/${repo}/commits?per_page=1&sha=${encodeURIComponent(branch)}`; }
+
+/* Build the Pages URL for a file so clicking opens the github.io page (same tab) */
+function buildPagesUrl(path){
+  // if this is a user site (owner.github.io), path is served from origin/path
+  const isUserSite = location.hostname.endsWith('github.io') && (state.repo === `${state.owner}.github.io`);
+  const base = location.origin;
+  const p = path.replace(/^\/+|\/+$/g,'');
+  if(isUserSite) return `${base}/${encodeURI(p)}`;
+  // otherwise pages for project sites are usually at origin/<repo>/<path>
+  return `${base}/${encodeURIComponent(state.repo)}/${encodeURI(p)}`;
 }
 
-function apiContentsUrl(owner,repo,path,branch){
-  const p = path ? '/' + encodeURIComponent(path).replace(/%2F/g,'/') : '';
-  return `https://api.github.com/repos/${owner}/${repo}/contents${p}?ref=${encodeURIComponent(branch)}`;
-}
-function apiCommitsLatestUrl(owner,repo,branch){
-  return `https://api.github.com/repos/${owner}/${repo}/commits?per_page=1&sha=${encodeURIComponent(branch)}`;
-}
-function rawUrl(owner,repo,branch,path){
-  return `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${path}`;
-}
-
-/* IndexedDB wrapper */
+/* IndexedDB wrapper (small) */
 const IDB_NAME = 'repo-browser-db';
 const IDB_VERSION = 1;
 const IDB_STORE = 'kv';
@@ -286,10 +268,10 @@ let state = { owner:'', repo:'', branch:'', path:'' };
 function setHeader(owner,repo,branch){ $('repoPill').textContent = `${owner}/${repo}`; $('repoSub').textContent = `${owner}/${repo}`; $('branchPill').textContent = `branch: ${branch}`; }
 function setApiLink(path){ const url = apiContentsUrl(state.owner,state.repo,path || '',state.branch); $('apiLink').href = url; $('apiLink').textContent = url.replace('https://api.github.com/',''); }
 
-async function fetchLatestBranchSha(){
-  try{ const url = apiCommitsLatestUrl(state.owner,state.repo,state.branch); const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }}); if(!res.ok) return null; const arr = await res.json(); return arr && arr[0] && arr[0].sha ? arr[0].sha : null; }catch(e){ return null; }
-}
+/* Get latest branch SHA */
+async function fetchLatestBranchSha(){ try{ const url = apiCommitsLatestUrl(state.owner,state.repo,state.branch); const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }}); if(!res.ok) return null; const arr = await res.json(); return arr && arr[0] && arr[0].sha ? arr[0].sha : null; }catch(e){ return null; } }
 
+/* Fetch directory with cache / SHA check */
 async function fetchDirWithCache(path){
   const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
   const dirKey = `${repoKey}:dir:${path || ''}`;
@@ -313,19 +295,7 @@ async function fetchDirWithCache(path){
   return { items: normalized, fromCache:false, latestSha };
 }
 
-async function fetchRawTextWithCache(path){
-  const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
-  const rawKey = `${repoKey}:raw:${path}`;
-  const cached = await idbGet(rawKey);
-  if(cached && (Date.now() - (cached.fetchedAt||0) < 1000 * 60 * 60 * 24)) return { text: cached.text, fromCache: true };
-  const raw = rawUrl(state.owner,state.repo,state.branch,path);
-  const res = await fetch(raw);
-  if(!res.ok) throw new Error('raw fetch failed');
-  const txt = await res.text();
-  await idbPut(rawKey, { text: txt, fetchedAt: Date.now() });
-  return { text: txt, fromCache: false };
-}
-
+/* Render rows */
 function renderRows(items){
   const rows = $('rows');
   if(!items || items.length === 0){ rows.innerHTML = '<div class="row"><div style="grid-column:1/-1;color:var(--muted)">Empty</div></div>'; $('statsPill').textContent = '0 items'; return; }
@@ -343,9 +313,16 @@ function renderRows(items){
   }).join('');
   rows.querySelectorAll('.row').forEach(r=>{
     r.addEventListener('click',(ev)=>{
-      const path=r.getAttribute('data-path'); const type=r.getAttribute('data-type');
-      if(ev.detail===2){ if(type==='dir') return navigate(path); window.open(rawUrl(state.owner,state.repo,state.branch,path),'_blank'); return; }
-      showPreview(path,type);
+      const path = r.getAttribute('data-path'); const type = r.getAttribute('data-type');
+      if(ev.detail === 2){
+        if(type === 'dir') return navigate(path);
+        // double-click file -> open within the github.io page (same tab)
+        const url = buildPagesUrl(path);
+        location.href = url;
+        return;
+      }
+      // single-click: show metadata (no code preview)
+      showMetadataPreview(path, type);
     });
     const p = r.getAttribute('data-path');
     (async ()=> {
@@ -363,33 +340,36 @@ function renderRows(items){
   });
 }
 
-async function showPreview(path,type){
+/* Metadata preview only — no code display */
+async function showMetadataPreview(path,type){
   $('previewTitle').textContent = path.split('/').pop();
-  $('previewSub').textContent = `${type} • ${path}`; $('previewActions').innerHTML = '';
+  $('previewSub').textContent = `${type} • ${path}`;
+  $('previewActions').innerHTML = '';
   setApiLink(path);
-  if(type==='dir'){
-    $('previewBody').innerHTML = `<div style="padding:0.7rem">Folder: <strong>${safe(path)}</strong></div>`;
-    $('previewActions').appendChild(createBtn('Open', ()=> navigate(path)));
-    $('previewActions').appendChild(createBtn('GitHub', ()=> window.open(`https://github.com/${state.owner}/${state.repo}/tree/${state.branch}/${path}`,'_blank')));
-    const commit = await fetchLastCommit(path);
-    $('metaFooter').textContent = commit ? `${commit.author} • ${new Date(commit.date).toLocaleString()} • ${commit.message}` : '—';
-    return;
+  // actions: open on site, open github, copy path
+  const actions = $('previewActions');
+  actions.appendChild(createBtn('Open on site', ()=> { location.href = buildPagesUrl(path); }));
+  actions.appendChild(createBtn('GitHub', ()=> { window.open(`https://github.com/${state.owner}/${state.repo}/${type === 'dir' ? 'tree' : 'blob'}/${state.branch}/${path}`,'_blank'); }));
+  actions.appendChild(createBtn('Copy path', ()=> { navigator.clipboard?.writeText(path).then(()=>alert('copied')).catch(()=>alert('copy failed')); }));
+
+  // preview body: for images we still show an image preview (useful), otherwise concise metadata only
+  if(type === 'dir'){
+    $('previewBody').innerHTML = `<div style="padding:0.6rem"><strong>Folder</strong><div class="muted-sm" style="margin-top:0.5rem">${safe(path)}</div></div>`;
+  } else {
+    if(isImageExt(extOf(path))){
+      const url = buildPagesUrl(path);
+      $('previewBody').innerHTML = `<img src="${url}" alt="${safe(path)}" style="max-width:100%;display:block;margin:auto;border-radius:8px"/>`;
+    } else {
+      $('previewBody').innerHTML = `<div style="padding:0.6rem"><div class="muted-sm">No in-page preview for file contents. Click "Open on site" to view it on the GitHub Pages site.</div></div>`;
+    }
   }
-  const raw = rawUrl(state.owner,state.repo,state.branch,path);
-  $('previewActions').appendChild(createBtn('Raw', ()=> window.open(raw,'_blank')));
-  $('previewActions').appendChild(createBtn('Copy path', ()=> navigator.clipboard?.writeText(path).then(()=>alert('copied')).catch(()=>alert('copy failed'))));
-  if(isImageExt(extOf(path))){
-    $('previewBody').innerHTML = `<img src="${raw}" alt="${safe(path)}" style="max-width:100%;display:block;margin:auto;border-radius:8px"/>`;
-  } else if(isTextExt(extOf(path))){
-    $('previewBody').innerHTML = '<div class="muted-sm">Loading… <span class="spinner"></span></div>';
-    try{ const r = await fetchRawTextWithCache(path); $('previewBody').innerHTML = `<pre class="code">${escapeHtml(r.text)}</pre>`; }catch(e){ $('previewBody').innerHTML = `<div class="muted-sm">Preview unavailable</div>`; }
-  } else { $('previewBody').innerHTML = `<div class="muted-sm">No preview</div>`; }
+
+  // commit metadata
   const commit = await fetchLastCommit(path);
-  $('metaFooter').textContent = commit ? `${commit.author} • ${new Date(commit.date).toLocaleString()} • ${commit.message}` : '—';
+  $('metaFooter').textContent = commit ? `${commit.author || 'unknown'} • ${new Date(commit.date).toLocaleString()} • ${commit.message}` : '—';
 }
 
-function createBtn(label, onClick){ const b=document.createElement('button'); b.className='btn'; b.textContent=label; b.addEventListener('click', onClick); return b; }
-function escapeHtml(s){ return safe(s).replace(/&lt;/g,'&lt;').replace(/&gt;/g,'&gt;'); }
+function createBtn(label,onClick){ const b=document.createElement('button'); b.className='btn'; b.textContent=label; b.addEventListener('click', onClick); return b; }
 
 async function fetchLastCommit(path){
   try{
@@ -402,6 +382,7 @@ async function fetchLastCommit(path){
   }catch(e){ return null; }
 }
 
+/* compute sizes (same behavior) */
 async function computeFolderSize(path){
   if(!confirm('Compute sizes recursively? This may use many API calls.')) throw new Error('cancel');
   let total = 0;
@@ -419,6 +400,7 @@ async function computeFolderSize(path){
   return total;
 }
 
+/* navigate & render pipeline */
 async function navigate(path){
   state.path = (path || '').replace(/^\/+|\/+$/g,'');
   $('breadcrumbs').textContent = '/' + (state.path || '');
@@ -432,7 +414,6 @@ async function navigate(path){
     $('rows').innerHTML = `<div class="row"><div style="grid-column:1/-1;color:#e06a6a;padding:12px">Error: ${err.message}</div></div>`;
   }
 }
-
 function renderCurrent(items){
   const q = ($('q').value || '').trim().toLowerCase();
   const filtered = (items || []).filter(it => {
