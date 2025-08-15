@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Trippy Space Runner — V3 Tube & Acid Trip</title>
+  <style>
+    html,body{height:100%;margin:0;background:#000;overflow:hidden;font-family:Inter,system-ui,Arial}
+    canvas{display:block;width:100vw;height:100vh}
+    .ui-score{position:fixed;left:14px;top:14px;color:#fff;z-index:10;padding:8px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(0,0,0,0.08));backdrop-filter: blur(6px);font-weight:700}
+    .ui-tldr{position:fixed;right:14px;top:14px;color:#000;z-index:10;padding:8px;border-radius:8px;background:linear-gradient(180deg,#fff,#f2f2ff);font-weight:600;text-align:right}
+    @media (max-width:600px){.ui-score{left:8px;top:8px;padding:6px}.ui-tldr{right:8px;top:8px;padding:6px}}
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div class="ui-score" id="score">Score: 0</div>
+
+
+<script>
+// Trippy Space Runner V3
+// - Circular tunnel walls (collision)
+// - Much faster forward speed
+// - Extra flashy RGB/neon/acid visuals
+// - Minimal UI: score left, TL;DR top-right
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = canvas.width = innerWidth; let H = canvas.height = innerHeight;
+const CX = ()=>W/2, CY = ()=>H/2;
+window.addEventListener('resize', ()=>{ W = canvas.width = innerWidth; H = canvas.height = innerHeight; tunnelRadius = Math.min(W,H)*0.48; });
+
+// State
+let score = 0; let time = 0;
+let baseSpeed = 18.0; // MUCH faster
+let speedMultiplier = 1;
+
+const player = { x:0, y:0, vx:0, vy:0 };
+let target = { x:0, y:0 };
+let pointer = { down:false, lastX:0, lastY:0 };
+
+const stars = []; const rings = []; const particles = [];
+let tunnelRadius = Math.min(W,H)*0.48;
+
+function rand(a,b){return Math.random()*(b-a)+a}
+
+function hsvToRgb(h,s,v){ if(!isFinite(h)||isNaN(h)) h=0; if(!isFinite(s)||isNaN(s)) s=0; if(!isFinite(v)||isNaN(v)) v=0; h=((h%1)+1)%1; s=Math.max(0,Math.min(1,s)); v=Math.max(0,Math.min(1,v)); const i=Math.floor(h*6); const f=h*6-i; const p=v*(1-s); const q=v*(1-f*s); const t=v*(1-(1-f)*s); let r=0,g=0,b=0; switch(i%6){case 0:r=v;g=t;b=p;break;case 1:r=q;g=v;b=p;break;case 2:r=p;g=v;b=t;break;case 3:r=p;g=q;b=v;break;case 4:r=t;g=p;b=v;break;case 5:r=v;g=p;b=q;break;} r=Math.round(Math.max(0,Math.min(1,r))*255); g=Math.round(Math.max(0,Math.min(1,g))*255); b=Math.round(Math.max(0,Math.min(1,b))*255); if(!isFinite(r)||!isFinite(g)||!isFinite(b)) return {r:255,g:255,b:255}; return {r,g,b}; }
+
+// populate world
+for(let i=0;i<380;i++){ stars.push({x:rand(-W,W), y:rand(-H,H), z:rand(60,2400), size:rand(0.3,4.5), hue:Math.random(), sat:rand(0.6,1), val:rand(0.6,1), type:Math.floor(rand(0,4)), prev:null, wob:rand(0.1,1.4) }) }
+for(let i=1;i<=30;i++) spawnRing(i*240 + rand(-120,120));
+
+function spawnRing(z){ rings.push({ x:rand(-W*0.45,W*0.45), y:rand(-H*0.4,H*0.4), z:z, radius:rand(60,260), thickness:rand(6,28), hue:Math.random(), spokes:Math.floor(rand(4,16)), rings:Math.floor(rand(1,5)), rot:rand(0,Math.PI*2), passed:false, dash:Math.random()>0.5 }); }
+
+// Input
+canvas.addEventListener('pointerdown', e=>{ pointer.down=true; pointer.lastX=e.clientX; pointer.lastY=e.clientY; });
+window.addEventListener('pointermove', e=>{ if(pointer.down){ const dx=e.clientX-pointer.lastX; const dy=e.clientY-pointer.lastY; target.x += dx * 0.9; target.y += dy * 0.9; target.x = Math.max(Math.min(target.x, W*0.7), -W*0.7); target.y = Math.max(Math.min(target.y, H*0.6), -H*0.6); pointer.lastX=e.clientX; pointer.lastY=e.clientY; } });
+window.addEventListener('pointerup', ()=>{ pointer.down=false; });
+canvas.addEventListener('click', ()=>{ target.x=0; target.y=0; });
+const keys = {}; window.addEventListener('keydown', e=>{ keys[e.key]=true; if(e.key===' '){ speedMultiplier = 3.2; } }); window.addEventListener('keyup', e=>{ keys[e.key]=false; if(e.key===' '){ speedMultiplier = 1; } });
+
+// particles
+function spawnParticle(x,y,vx,vy,life,size,color,type){ particles.push({x,y,vx,vy,life,age:0,size,color,type}); }
+
+function spawnRingEffects(sx,sy,baseHue){ // big wild blast
+  // sparkles
+  for(let i=0;i<30;i++){ const ang=Math.random()*Math.PI*2; const sp=rand(2,12); const vx=Math.cos(ang)*sp; const vy=Math.sin(ang)*sp; const hue=(baseHue + Math.random()*0.3 - 0.15 + 1)%1; const c=hsvToRgb(hue,0.98,1); spawnParticle(sx + rand(-20,20), sy + rand(-20,20), vx, vy, rand(0.6,1.8), rand(1.2,3.6), `rgb(${c.r},${c.g},${c.b})`, 'spark'); }
+  // fireworks bloom
+  for(let i=0;i<14;i++){ const ang=(i/14)*Math.PI*2 + rand(-0.2,0.2); const sp=rand(3,12); const vx=Math.cos(ang)*sp; const vy=Math.sin(ang)*sp - rand(0,4); const c=hsvToRgb((baseHue + i*0.03)%1,0.95,1); spawnParticle(sx,sy,vx,vy,rand(0.9,2.2), rand(2.6,5.5), `rgb(${c.r},${c.g},${c.b})`, 'fire'); }
+  // large shock
+  const sw={x:sx,y:sy,r:6,maxR:rand(120,320),a:1.1,hue:baseHue}; particles.push({type:'shock',obj:sw});
+}
+
+// Tunnel collision: keep player inside radial boundary in world space. If outside, bounce back and spawn sparks
+function checkTunnelCollision(){ const dist = Math.sqrt(player.x*player.x + player.y*player.y); const limit = tunnelRadius; if(dist > limit){ const nx = player.x / dist; const ny = player.y / dist; // project onto rim
+    player.x = nx * limit; player.y = ny * limit; // reflect velocity
+    const vDot = player.vx*nx + player.vy*ny; player.vx -= (1.6 * vDot) * nx; player.vy -= (1.6 * vDot) * ny; // damp
+    // spawn wall-hit sparks at screen pos
+    const sx = (player.x - player.x)*1 + CX(); const sy = (player.y - player.y)*1 + CY(); // trivial convert -> center
+    const hue = (Math.random()%1 + 1)%1; for(let i=0;i<8;i++){ const ang=Math.random()*Math.PI*2; const sp=rand(2,7); spawnParticle(CX() + nx*limit*0.98 + rand(-6,6), CY() + ny*limit*0.98 + rand(-6,6), Math.cos(ang)*sp, Math.sin(ang)*sp, 0.4, rand(1,3), `rgb(${hsvToRgb(hue,0.95,1).r},${hsvToRgb(hue,0.95,1).g},${hsvToRgb(hue,0.95,1).b})`, 'spark'); }
+  } }
+
+function update(dt){ time += dt; const forward = baseSpeed * (1 + Math.min(score/1200, 12)) * speedMultiplier * (dt*60);
+  // controls
+  let kx=0,ky=0; if(keys['ArrowLeft']||keys['a']) kx -=1; if(keys['ArrowRight']||keys['d']) kx +=1; if(keys['ArrowUp']||keys['w']) ky -=1; if(keys['ArrowDown']||keys['s']) ky +=1; target.x += kx * 12 * Math.max(1,Math.min(W/900,2)); target.y += ky * 10 * Math.max(1,Math.min(H/700,2));
+  // physics
+  const stiffness = 0.095; const drag = 0.78; const dx = (target.x - player.x); const dy = (target.y - player.y); player.vx += dx*stiffness; player.vy += dy*stiffness; player.vx *= drag; player.vy *= drag; player.x += player.vx*(dt*60); player.y += player.vy*(dt*60);
+  if(!pointer.down && !keys['ArrowLeft'] && !keys['ArrowRight'] && !keys['a'] && !keys['d']){ target.x *= 0.994; target.y *= 0.994; }
+  // world forward
+  for(let s of stars){ s.z -= forward * (0.6 + s.size*0.9); if(s.z < 6){ s.z += rand(1800,3200); s.x = rand(-W,W); s.y = rand(-H,H); s.hue=Math.random(); s.prev=null; } }
+  for(let r of rings){ r.z -= forward * (0.96 + r.radius/1800); r.rot += (forward*0.002) * (r.radius/150); if(r.z < -150){ r.z += rand(3800,6200); r.x = rand(-W*0.45,W*0.45); r.y = rand(-H*0.4,H*0.4); r.passed=false; r.hue=Math.random(); } if(!r.passed && r.z < 90 && r.z > -80){ const scale = 900/(r.z+900); const rx = (r.x - player.x)*scale + CX(); const ry = (r.y - player.y)*scale + CY(); const ringScreenRadius = r.radius * scale; const dxp = rx - CX(); const dyp = ry - CY(); const dist = Math.sqrt(dxp*dxp + dyp*dyp); if(dist < ringScreenRadius * 0.60){ score += Math.floor(60 + (r.radius*0.2)); r.passed=true; spawnRingEffects(rx,ry,((r.hue%1)+1)%1); } } }
+  if(rings.length < 40 && Math.random() < 0.045) spawnRing(1200 + rand(0,1600));
+  // particles
+  for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; if(p.type==='shock'){ p.obj.r += (120 + Math.random()*120)*dt; p.obj.a -= 1.6*dt; if(p.obj.a <= 0) particles.splice(i,1); continue; } p.age += dt; if(p.age >= p.life){ particles.splice(i,1); continue; } p.vy += 9.8*0.26*dt; p.vx *= 0.996; p.vy *= 0.996; p.x += p.vx*60*dt; p.y += p.vy*60*dt; }
+  // tunnel collision
+  checkTunnelCollision(); }
+
+function draw(){ // wild background: multi-layer chromatic moving gradients
+  // long trails, lower alpha to keep trails longer
+  ctx.fillStyle = 'rgba(0,0,0,0.06)'; ctx.fillRect(0,0,W,H);
+  // chroma blobs
+  ctx.globalCompositeOperation = 'lighter';
+  for(let i=0;i<6;i++){ try{ ctx.filter = 'blur(' + (40 + 40*Math.sin(time*0.02 + i)) + 'px)'; const rx = W*(0.15 + 0.7*Math.abs(Math.sin(time*0.017 + i))); const ry = H*(0.15 + 0.7*Math.abs(Math.cos(time*0.013 + i*0.7))); const hue = ((time*8 + i*100)%360)/360; const c=hsvToRgb(hue,0.98,0.95); const g = ctx.createRadialGradient(rx,ry,0,rx,ry,Math.max(W,H)*0.9); g.addColorStop(0,`rgba(${c.r},${c.g},${c.b},0.16)`); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); }catch(e){} } ctx.filter='none'; ctx.globalCompositeOperation='source-over';
+  // tunnel walls: circular tube
+  ctx.save(); // outer glow ring
+  const rim = tunnelRadius; const pulse = 6 + Math.sin(time*0.08)*4;
+  const gradient = ctx.createRadialGradient(CX(),CY(), rim*0.85, CX(),CY(), rim*1.12);
+  const hg = ((time*0.06)%360);
+  gradient.addColorStop(0, `rgba(0,0,0,0)`);
+  gradient.addColorStop(0.6, `hsla(${(hg+40)%360},100%,55%,0.06)`);
+  gradient.addColorStop(1, `hsla(${(hg+210)%360},100%,45%,0.9)`);
+  ctx.fillStyle = gradient; ctx.beginPath(); ctx.arc(CX(),CY(), rim*1.2, 0, Math.PI*2); ctx.fill(); ctx.restore();
+  // tunnel surface lines for motion
+  ctx.save(); ctx.translate(CX(),CY()); ctx.globalCompositeOperation = 'lighter'; for(let i=0;i<360;i+=6){ const ang = (i/180)*Math.PI + time*0.02; const r0 = rim*0.82 + Math.sin(i*0.02 + time*0.05)*12; const r1 = rim*1.02 + Math.cos(i*0.01 + time*0.03)*8; const h = ((i/360) + time*0.03)%1; const c=hsvToRgb(h,0.98,0.9); ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${0.035 + Math.abs(Math.cos(time*0.02+i))*0.05})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(Math.cos(ang)*r0, Math.sin(ang)*r0); ctx.lineTo(Math.cos(ang)*r1, Math.sin(ang)*r1); ctx.stroke(); } ctx.restore();
+
+  // stars (with streaks)
+  for(let s of stars){ const scale = 900/(s.z + 900); const x = (s.x - player.x)*scale + CX(); const y = (s.y - player.y)*scale + CY(); const sz = Math.max(0.6, s.size*scale*1.3); if(x < -200 || x > W+200 || y < -200 || y > H+200){ s.prev=null; continue; } const hueVal = ((s.hue + Math.sin(time*s.wob)*0.02)%1+1)%1; const rgb = hsvToRgb(hueVal, s.sat||0.95, s.val||0.95); if(s.prev){ ctx.beginPath(); ctx.moveTo(s.prev.x, s.prev.y); ctx.lineTo(x,y); ctx.lineWidth = Math.max(1, sz*(2 + Math.min(10, Math.hypot(x-s.prev.x,y-s.prev.y)*0.02))); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.14 + 0.6*Math.min(1,sz/4)})`; ctx.stroke(); } ctx.save(); if(s.type===0){ try{ const g2 = ctx.createRadialGradient(x,y,0,x,y,sz*8); g2.addColorStop(0,`rgba(${rgb.r},${rgb.g},${rgb.b},0.98)`); g2.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g2; ctx.beginPath(); ctx.arc(x,y,sz,0,Math.PI*2); ctx.fill(); }catch(e){ ctx.fillStyle=`rgb(${rgb.r},${rgb.g},${rgb.b})`; ctx.beginPath(); ctx.arc(x,y,sz,0,Math.PI*2); ctx.fill(); } } else if(s.type===1){ ctx.lineWidth = Math.max(1,sz*0.9); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.98)`; ctx.beginPath(); ctx.arc(x,y,sz*1.6,0,Math.PI*2); ctx.stroke(); } else if(s.type===2){ ctx.globalCompositeOperation='lighter'; ctx.fillStyle=`rgba(${rgb.r},${rgb.g},${rgb.b},0.95)`; ctx.fillRect(x-sz*1.2,y-sz*0.25,sz*2.4,sz*0.5); ctx.fillRect(x-sz*0.25,y-sz*1.2,sz*0.5,sz*2.4); ctx.globalCompositeOperation='source-over'; } else { for(let i=0;i<3;i++){ ctx.beginPath(); ctx.lineWidth = Math.max(0.6, sz*0.6*(1-i*0.35)); const a = sz*(1 + i*0.9) + Math.sin(time*s.pulse + i)*0.8; ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.22 - i*0.05})`; ctx.arc(x,y,a,0,Math.PI*2); ctx.stroke(); } } ctx.restore(); s.prev={x,y}; }
+
+  // rings - now extra flashy
+  for(let r of rings){ const scale = 900/(r.z + 900); if(scale <= 0) continue; const rx = (r.x - player.x)*scale + CX(); const ry = (r.y - player.y)*scale + CY(); const ringRadius=r.radius*scale; const thickness=Math.max(2, r.thickness*scale*0.8); if(r.z < -180) continue; const hueBase = (((r.hue + (r.rot%(Math.PI*2))/(Math.PI*2)*0.2)%1)+1)%1; ctx.save(); ctx.translate(rx,ry); ctx.rotate(r.rot + Math.sin(time*0.06)*(0.1 + r.radius/800)); // wobble
+    // neon glow
+    try{ ctx.filter='blur(' + (12 + thickness*0.9) + 'px)'; const g3 = ctx.createRadialGradient(0,0,0,0,0,ringRadius + thickness*3); const c3 = hsvToRgb((hueBase+0.04)%1,0.98,0.95); g3.addColorStop(0,`rgba(${c3.r},${c3.g},${c3.b},0.26)`); g3.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g3; ctx.beginPath(); ctx.arc(0,0, ringRadius + thickness*2,0,Math.PI*2); ctx.fill(); ctx.filter='none'; }catch(e){ ctx.filter='none'; }
+    // concentric rainbow strokes
+    for(let i=0;i<r.rings;i++){ const rr = ringRadius*(1 - i*0.14); ctx.beginPath(); ctx.lineWidth = thickness*(1 - i*0.18); if(r.dash) ctx.setLineDash([6 + i*8, 10 + i*6]); else ctx.setLineDash([]); const h = ((r.hue + i*0.06 + time*0.04) % 1 + 1) % 1; const c = hsvToRgb(h,0.98,0.95); ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${0.98 - i*0.26})`; ctx.arc(0,0,rr,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]); }
+    // spokes
+    ctx.lineWidth = Math.max(1, thickness*0.45); for(let s=0;s<r.spokes;s++){ ctx.beginPath(); const a=(s/r.spokes)*Math.PI*2 + r.rot*0.6; const x1=Math.cos(a)*ringRadius*0.15; const y1=Math.sin(a)*ringRadius*0.15; const x2=Math.cos(a)*ringRadius*0.98; const y2=Math.sin(a)*ringRadius*0.98; const cs=hsvToRgb(((r.hue + s*0.02)%1 +1)%1,0.98,0.95); ctx.strokeStyle = `rgba(${cs.r},${cs.g},${cs.b},0.55)`; ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); } ctx.restore(); }
+
+  // particles
+  ctx.save(); ctx.globalCompositeOperation='lighter'; for(let p of particles){ if(p.type==='shock'){ const o=p.obj; const c=hsvToRgb(o.hue,0.98,0.95); ctx.beginPath(); ctx.lineWidth = 6; ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},${Math.max(0,o.a)})`; ctx.arc(o.x,o.y,o.r,0,Math.PI*2); ctx.stroke(); continue; } const alpha = Math.max(0,1 - (p.age/p.life)); ctx.fillStyle = p.color.replace(')', `,${alpha})`).replace('rgb','rgba'); if(p.type==='spark'){ ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.moveTo(p.x - p.vx*2, p.y - p.vy*2); ctx.lineTo(p.x,p.y); ctx.lineWidth=Math.max(0.5,p.size*0.5); ctx.strokeStyle=ctx.fillStyle; ctx.stroke(); } else if(p.type==='fire'){ ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=Math.max(0.08,alpha*0.6); const g4=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.size*4); g4.addColorStop(0,p.color.replace('rgb','rgba').replace(')', `,${alpha*0.5})`)); g4.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g4; ctx.beginPath(); ctx.arc(p.x,p.y,p.size*3,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; } else { ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill(); } } ctx.restore();
+
+  // ship visible and flashy: thick neon outline + engine flare
+  const px = CX(), py = CY(); ctx.save(); ctx.translate(px,py); ctx.rotate(player.x*0.0009);
+  // engine flare
+  const eg = ctx.createRadialGradient(0,36,0,0,36,160); const eb = Math.abs(Math.sin(time*6))*0.35 + 0.25; eg.addColorStop(0, `rgba(255,230,160,${0.9*eb})`); eg.addColorStop(0.2, `rgba(255,80,30,${0.4*eb})`); eg.addColorStop(1,'rgba(0,0,0,0)'); ctx.globalCompositeOperation='lighter'; ctx.fillStyle=eg; ctx.beginPath(); ctx.ellipse(0,40, 140* (0.8+0.6*(speedMultiplier-1)), 40*(0.8+0.6*(speedMultiplier-1)), 0,0,Math.PI*2); ctx.fill(); ctx.globalCompositeOperation='source-over';
+  // ship body
+  ctx.beginPath(); ctx.moveTo(-40,26); ctx.lineTo(0,-56); ctx.lineTo(40,26); ctx.closePath(); ctx.fillStyle='rgba(240,250,255,0.98)'; ctx.fill(); ctx.lineWidth=4; ctx.strokeStyle='rgba(20,60,255,0.95)'; ctx.stroke();
+  // neon rim
+  ctx.beginPath(); ctx.moveTo(-40,26); ctx.lineTo(0,-56); ctx.lineTo(40,26); ctx.closePath(); ctx.lineWidth=6; ctx.strokeStyle=`rgba(${hsvToRgb((time*0.05)%1,0.95,0.95).r},${hsvToRgb((time*0.05)%1,0.95,0.95).g},${hsvToRgb((time*0.05)%1,0.95,0.95).b},0.85)`; ctx.stroke();
+  // cockpit
+  ctx.beginPath(); ctx.ellipse(0,-12,12,8,0,0,Math.PI*2); ctx.fillStyle='rgba(18,22,28,0.95)'; ctx.fill(); ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.stroke(); ctx.restore();
+
+  // HUD score
+  document.getElementById('score').textContent = 'Score: ' + score;
+}
+
+let last = performance.now(); function loop(now){ const dt = Math.min(0.04, (now-last)/1000); update(dt); draw(); last=now; requestAnimationFrame(loop); } requestAnimationFrame(loop);
+
+// debug
+window.__game_v3 = {stars, rings, particles, player};
+</script>
+</body>
+</html>
