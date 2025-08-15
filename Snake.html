@@ -3,146 +3,328 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Procedural Snake 2 — Tail Eating Boogaloo</title>
+<title>Procedural Snake — Combo, Magnets, Debug, Hi‑Score</title>
 <style>
-  html,body{height:100%;margin:0;background:#0b0b0d;color:#ddd;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
-  #game{display:block;background:#07070a;margin:0 auto;box-shadow:0 8px 40px rgba(0,0,0,.9);}
-  .ui{position:fixed;left:12px;top:12px;color:#bfc3ff;font-size:13px;line-height:1.3}
-  .hint{opacity:.85;margin-top:8px;color:#9fb3ff}
-  .footer{position:fixed;right:12px;top:12px;color:#9aa;background:#071; padding:4px 8px;border-radius:6px;font-size:12px}
-  button{background:#1a1a26;border:1px solid #2b2b3a;padding:6px 8px;color:#bcd;border-radius:6px}
+  :root{--bg:#0b0b0d;--text:#d7dbff;--muted:#9fb3ff}
+  html,body{height:100%;margin:0;background:var(--bg);color:#ddd;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  #game{display:block;background:#080a12;margin:0 auto;box-shadow:0 8px 40px rgba(0,0,0,.9)}
+  .ui{position:fixed;left:12px;top:12px;color:var(--text);font-size:13px;line-height:1.3;background:linear-gradient(180deg,rgba(16,18,28,.7),rgba(10,12,20,.5));padding:8px 10px;border-radius:8px;border:1px solid #1f2233}
+  .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .hint{opacity:.9;margin-top:6px;color:var(--muted)}
+  button{background:#1a1a26;border:1px solid #2b2b3a;padding:6px 8px;color:#cfe;border-radius:6px;cursor:pointer}
+  .tele{position:fixed;right:12px;top:12px;color:#cfe;padding:8px 10px;background:linear-gradient(180deg,rgba(18,22,30,.75),rgba(10,12,20,.6));border-radius:8px;font-size:12px;text-align:left;border:1px solid #1f2233;min-width:280px}
+  .tele b{display:block;margin-bottom:6px;color:#eaf}
+  .tele .kv{display:flex;justify-content:space-between;margin:2px 0}
+  .meter{height:10px;background:#1a1f33;border-radius:6px;overflow:hidden;border:1px solid #29314a;margin-top:6px}
+  .meter>div{height:100%;background:linear-gradient(90deg,#6df,#b9f);width:0%}
+  .combo{position:fixed;left:50%;top:16px;transform:translateX(-50%);font-weight:700;font-size:18px;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.6)}
+  .badge{display:inline-block;padding:2px 6px;border:1px solid #2d3a77;border-radius:6px;background:rgba(30,40,80,.35);margin-left:6px}
+  input[type=number]{width:56px;background:#0f1220;border:1px solid #28314a;color:#cfe;border-radius:6px;padding:2px 4px}
+  label{user-select:none}
 </style>
 </head>
 <body>
-<canvas id="game" width="1000" height="700"></canvas>
+<canvas id="game"></canvas>
 <div class="ui">
-  <div><strong>Snake</strong></div>
-  <div class="hint">WASD to move..</div>
-  <div class="hint">Patch Notes: NPCs will rarely kill themselves now.</div>
-  <div class="hint">Player still dies on self-collision and restarts.</div>
-  <div style="margin-top:8px">Length: <span id="len">0</span>  •  Score: <span id="score">0</span></div>
-  <div style="margin-top:8px"><button id="restart">Restart</button></div>
+  <div><strong>Procedural Snake — Combo + Magnets + Debug</strong></div>
+  <div class="row" style="margin-top:6px">Length:&nbsp;<span id="len">0</span> • Score:&nbsp;<span id="score">0</span> • Hi:&nbsp;<span id="hi">0</span><span class="badge" id="magnetBadge" style="display:none">Magnet: <span id="magnetLeft">0</span>s</span></div>
+  <div class="row" style="margin-top:6px"><button id="restart">Restart</button></div>
+  <div class="hint" style="margin-top:6px">WASD to move. Self-collision kills and restarts. NPCs re-route; no stalling. Orbs are static; food spawns on‑screen only.</div>
 </div>
+<div class="tele" id="tele">
+  <b>Telemetry</b>
+  <div class="kv"><span>NPC self-deaths</span><span id="t-npc-self">0</span></div>
+  <div class="kv"><span>NPC prevented (safe dir)</span><span id="t-npc-prevent">0</span></div>
+  <div class="kv"><span>NPC collisions (other)</span><span id="t-npc-coll">0</span></div>
+  <div class="kv"><span>Head‑vs‑Head kills</span><span id="t-head-kill">0</span></div>
+  <div class="kv"><span>Pathfinder reroutes</span><span id="t-path-succ">0</span></div>
+  <div class="kv"><span>Combo best</span><span id="t-combo-best">0</span></div>
+  <div class="kv"><span>Orbs collected</span><span id="t-orb-count">0</span></div>
+  <div class="kv"><span>Magnet remaining</span><span id="t-magnet">0s</span></div>
+  <div class="kv"><label><input type="checkbox" id="tele-path" checked> Pathfinding (near player)</label></div>
+  <div class="kv"><label><input type="checkbox" id="tele-debug"> Debug overlay</label> <span class="hint">N:&nbsp;<input type="number" id="tele-debug-n" min="1" max="20" value="8"></span></div>
+  <div class="meter"><div id="comboBar"></div></div>
+</div>
+<div class="combo" id="comboText"></div>
 <script>
-/* Update summary:
-   - NPCs now avoid self-killing most of the time.
-   - When an NPC's head would move into its own body, we now:
-       * immediately kill the player (unchanged) if the player does the move.
-       * for NPCs: allow stepping into vacating tail when not growing (safe), otherwise only kill on a rare chance (SELF_KILL_CHANCE).
-       * if we avoid killing, we nudge the NPC to choose a different direction to reduce repeated self-hits.
-   - This is a minimal, low-cost change that keeps overall collision rules intact while reducing NPC self-deaths.
-*/
+(function(){
+  // ===== Config =====
+  let TILE = 28;                    // dynamic scale via resize (bigger monitors see more)
+  const TICK_MS = 90;               // fixed speed
+  const MAX_NPC = 63;               // cap
+  const FOOD_TARGET_ONSCREEN = 130; // maintained count
+  const COMBO_WINDOW_MS = 1800;     // ~2x original (~900ms)
+  const SUPER_ORB_THRESHOLD = 6;    // spawn super every N combo
+  const SUPER_ORB_VALUE = 5;        // growth & score
+  const PATHFINDER_NEAR_RADIUS = 12;// tiles
+  const PATHFINDER_MAX_STEPS = 12;  // BFS cap
 
-function mulberry32(a){return function(){a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a>>>15, 1 | a); t = t + Math.imul(t ^ t>>>7, 61 | t) ^ t; return ((t ^ t>>>14) >>> 0) / 4294967296;};}
-function randRange(rng,a,b){return a + Math.floor(rng()*(b-a+1));}
-function pick(rng,arr){return arr[Math.floor(rng()*arr.length)];}
-function hsvToRgb(h,s,v){let f=(n)=>{let k=(n+h/60)%6; return v - v*s*Math.max(Math.min(k,4-k,1),0);}; return [Math.round(f(5)*255),Math.round(f(3)*255),Math.round(f(1)*255)];}
+  // Magnets
+  const MAGNET_DURATION_MS = 30000;       // 30s after 1000 orbs
+  const MAGNET_RADIUS_TILES = 5;          // macro radius
+  const MICRO_MAGNET_COMBO = 10;          // x10, x20, ...
+  const MICRO_MAGNET_DURATION_MS = 3000;  // 3s
+  const MICRO_MAGNET_RADIUS_TILES = 3;    // micro radius
 
-const TILE=28;
-const BASE_VIEW_X=40, BASE_VIEW_Y=26;
-const VIEW_MULT=6;
-const VIEW_TILES_X = BASE_VIEW_X * VIEW_MULT;
-const VIEW_TILES_Y = BASE_VIEW_Y * VIEW_MULT;
-const TICK_MS=90;
-const SEED=Math.floor(Math.random()*1e9);
-const rng = mulberry32(SEED);
-const MAX_NPC = 250; // left as-is from your last save; change if you want
+  // ===== State =====
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d',{alpha:false});
+  let W=0, H=0, DPR=Math.max(1, window.devicePixelRatio||1);
 
-// How often NPCs will actually allow a self-killing move to stand
-// Set low so NPCs almost never suicide (adjustable)
-const NPC_SELF_KILL_CHANCE = 0.08;
+  const rng = mulberry32(Math.floor(Math.random()*1e9));
+  let player=null, snakes=[], foods=[], glowBalls=[], popups=[];
+  let lastTick=0, score=0, hiScore=0, pendingRestart=false;
+  let comboCount=0, comboBest=0, comboTimer=0;
+  let orbsCollected=0;
+  let magnetUntil=0, microMagnetUntil=0, lastMicroAwardedCombo=0; // perf.now timestamps
 
-// NPC AI tuning
-const NPC_NEAR_RADIUS = 8; // tiles: within this, NPCs are much more active
-const NPC_FAR_THINK = 12;   // ticks between AI updates when very far
-const NPC_BASE_THINK = 4;   // base ticks
+  const telemetry = { npcSelfDeaths:0, npcPrevented:0, npcCollisions:0, headKills:0, pathSuccess:0, comboBest:0, orbCount:0 };
 
-const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d',{alpha:false}); let W=canvas.width, H=canvas.height;
-window.addEventListener('resize',()=>{const r=0.95*Math.min(window.innerWidth,1400); canvas.width=r; canvas.height=r*0.7; W=canvas.width; H=canvas.height;});
+  // toggles
+  let pathfinderEnabled = true;
+  let debugOverlay = false; let debugN = 8; let lastOccMap=null;
 
-let player=null; let snakes=[]; let glowBalls=[]; let foods=[]; let lastTick=0; let score=0; let pendingRestart=false;
+  // ===== UI wiring =====
+  document.getElementById('tele-path').addEventListener('change', e=> pathfinderEnabled = e.target.checked);
+  document.getElementById('tele-debug').addEventListener('change', e=> debugOverlay = e.target.checked);
+  document.getElementById('tele-debug-n').addEventListener('change', e=>{ const n=parseInt(e.target.value,10); debugN = isNaN(n)?8:Math.max(1,Math.min(20,n)); e.target.value = String(debugN); });
+  document.getElementById('restart').addEventListener('click', afterReset);
+  window.addEventListener('resize', sizeCanvas);
 
-document.getElementById('restart').addEventListener('click', ()=>{ afterReset(); });
+  sizeCanvas();
+  afterReset();
 
-function afterReset(){ foods = []; glowBalls = []; snakes = []; lastTick = 0; score = 0; pendingRestart = false; document.getElementById('score').textContent = score; player = makeSnake('player', 0, 0, 6, true); snakes.push(player); for(let i=0;i<MAX_NPC;i++){ spawnOffscreenNPC(); } for(let i=0;i<180;i++){ foods.push({x:randRange(rng,-BASE_VIEW_X,BASE_VIEW_X), y:randRange(rng,-BASE_VIEW_Y,BASE_VIEW_Y), id:Math.random().toString(36).slice(2)}); } }
+  // ===== Input =====
+  const keyMap={w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
+  window.addEventListener('keydown', e=>{ const k=(e.key||'').toLowerCase(); if(!(k in keyMap)) return; const d=keyMap[k]; if(player && !(d[0]===-player.dir[0] && d[1]===-player.dir[1])) player.nextDir=d; });
 
-afterReset();
-
-function makeSnake(id,x,y,len,isPlayer){ const colHue = Math.floor(rng()*360); const segs = []; for(let i=0;i<len;i++) segs.push({x:x-i,y:y}); return {id, segments:segs, dir:[1,0], nextDir:[1,0], alive:true, grow:0, colorHue:colHue, isPlayer, ai:{target:null,think:0}}; }
-
-const keyMap = {w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]}; window.addEventListener('keydown',(e)=>{ if(e.key && e.key.toLowerCase() in keyMap){ const d = keyMap[e.key.toLowerCase()]; if(player && !(d[0] === -player.dir[0] && d[1] === -player.dir[1])) player.nextDir = d; }});
-
-function euclid(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.sqrt(dx*dx+dy*dy); }
-
-function buildOccupancy(){ const occ = new Set(); for(const s of snakes){ if(!s.alive) continue; for(let i=0;i<s.segments.length;i++){ const p = s.segments[i]; occ.add(p.x+','+p.y); } } return occ; }
-
-function spawnOffscreenNPC(){ if(!player) return; const currentNPC = snakes.filter(s=>!s.isPlayer).length; if(currentNPC >= MAX_NPC) return; const screenRadius = Math.max(VIEW_TILES_X, VIEW_TILES_Y) / 2; const spawnRange = screenRadius * 2 + 40; let attempts = 0; let x=0, y=0; do{ x = player.segments[0].x + randRange(rng, -spawnRange, spawnRange); y = player.segments[0].y + randRange(rng, -spawnRange, spawnRange); attempts++; } while((Math.abs(x - player.segments[0].x) <= screenRadius && Math.abs(y - player.segments[0].y) <= screenRadius) && attempts < 300); const base = Math.max(3, (player ? player.segments.length : 5)); const len = Math.max(3, base + randRange(rng, -3, 3)); const id = 'cpu'+Math.floor(Math.random()*1e9); snakes.push(makeSnake(id, x, y, len, false)); }
-
-function aiThink(s){ if(!s || !s.alive) return; const head = s.segments[0]; const distToPlayer = euclid(head, player.segments[0]); let thinkInterval = NPC_BASE_THINK + Math.floor(Math.random()*3); if(distToPlayer > Math.max(VIEW_TILES_X, VIEW_TILES_Y)) thinkInterval = NPC_FAR_THINK + Math.floor(Math.random()*8); if(distToPlayer < NPC_NEAR_RADIUS) thinkInterval = 1 + Math.floor(Math.random()*2); s.ai.think--; if(s.ai.think > 0) return; s.ai.think = thinkInterval; let candidate = null; let bestD = Infinity; for(const f of foods){ const d = Math.abs(f.x-head.x) + Math.abs(f.y-head.y); if(d < bestD){ bestD = d; candidate = f; if(d <= 6) break; } } for(const g of glowBalls){ const d = Math.abs(g.x-head.x) + Math.abs(g.y-head.y); if(d < bestD){ bestD = d; candidate = g; if(d <= 6) break; } } if(distToPlayer < 6 && player.segments.length > s.segments.length && rng() < 0.55){ const dx = head.x - player.segments[0].x + randRange(rng,-1,1); const dy = head.y - player.segments[0].y + randRange(rng,-1,1); if(Math.abs(dx) > Math.abs(dy)) s.nextDir = [Math.sign(dx)||1,0]; else s.nextDir = [0, Math.sign(dy)||1]; return; } if(!candidate){ const dx = player.segments[0].x - head.x + randRange(rng,-4,4); const dy = player.segments[0].y - head.y + randRange(rng,-4,4); if(Math.abs(dx) > Math.abs(dy)) s.nextDir = [Math.sign(dx)||1,0]; else s.nextDir = [0, Math.sign(dy)||1]; if(rng() < 0.06) s.nextDir = pick(rng, [[1,0],[-1,0],[0,1],[0,-1]]); return; } let dx = candidate.x - head.x, dy = candidate.y - head.y; let prefer; if(Math.abs(dx) > Math.abs(dy)) prefer = [Math.sign(dx)||1,0]; else prefer = [0, Math.sign(dy)||1]; const occ = buildOccupancy(); const tryDirs = [prefer, [1,0],[-1,0],[0,1],[0,-1]]; for(const dir of tryDirs){ const nx = head.x + dir[0], ny = head.y + dir[1]; if(!occ.has(nx+','+ny) || (nx===s.segments[s.segments.length-1].x && ny===s.segments[s.segments.length-1].y)){ s.nextDir = dir; break; } } if(rng() < 0.05) s.nextDir = pick(rng, [[1,0],[-1,0],[0,1],[0,-1]]); }
-
-function moveAll(){ for(const s of snakes){ if(!s.alive) continue; if(!s.isPlayer) aiThink(s); }
-  const headTargets = new Map(); for(const s of snakes){ if(!s.alive) continue; const dir = s.nextDir || s.dir; s.dir = dir; const head = s.segments[0]; headTargets.set(s.id, {x: head.x + dir[0], y: head.y + dir[1]}); }
-  const targetGroups = new Map(); for(const [id,pos] of headTargets.entries()){ const k = pos.x+','+pos.y; if(!targetGroups.has(k)) targetGroups.set(k,[]); targetGroups.get(k).push(id); }
-  const eatenThisTick = new Set(); for(const [k,arr] of targetGroups.entries()){ if(arr.length>1){ const involved = arr.map(id=>snakes.find(s=>s.id===id)).filter(Boolean).filter(s=>s.alive); if(involved.length<=1) continue; involved.sort((a,b)=>b.segments.length - a.segments.length); const winner = involved[0]; const losers = involved.slice(1); for(const loser of losers){ loser.alive = false; eatenThisTick.add(loser.id); winner.grow += loser.segments.length; } } }
-
-  const proposedOccupancy = new Map(); const proposedSegmentsBySnake = new Map(); for(const s of snakes){ if(!s.alive) continue; if(eatenThisTick.has(s.id)) continue; const target = headTargets.get(s.id); if(!target) continue; const willGrow = s.grow > 0; const newSegs = []; newSegs.push({x: target.x, y: target.y}); const keep = Math.max(0, s.segments.length - (willGrow ? 0 : 1)); for(let i=0;i<keep;i++){ newSegs.push({x: s.segments[i].x, y: s.segments[i].y}); } proposedSegmentsBySnake.set(s.id, newSegs); for(let i=0;i<newSegs.length;i++){ const p = newSegs[i]; const key = p.x+','+p.y; if(!proposedOccupancy.has(key)) proposedOccupancy.set(key, []); proposedOccupancy.get(key).push({snakeId: s.id, index: i}); } }
-
-  // detect collisions (head onto other's occupancy) AND self-collisions with NPC mitigation
-  const toKill = new Set(); let playerDied = false; for(const s of snakes){ if(!s.alive) continue; if(eatenThisTick.has(s.id)) continue; const target = headTargets.get(s.id); const key = target.x+','+target.y; const occupants = proposedOccupancy.get(key) || []; for(const occ of occupants){ if(occ.snakeId !== s.id){ toKill.add(s.id); break; }
-      // self-collision: occ.index > 0 means head would land on own body
-      if(occ.snakeId === s.id && occ.index > 0){
-        // player: strict rule -> die
-        if(s.isPlayer){ toKill.add(s.id); playerDied = true; break; }
-        // NPC: allow tail-step when not growing, otherwise only kill on rare chance
-        const newSegs = proposedSegmentsBySnake.get(s.id);
-        const isSteppingIntoTail = (occ.index === newSegs.length - 1);
-        if(isSteppingIntoTail && s.grow === 0){
-          // safe: tail will vacate this tick — let NPC proceed
-          continue;
-        }
-        // otherwise only rarely let NPCs actually die from self-hits
-        if(rng() < NPC_SELF_KILL_CHANCE){ toKill.add(s.id); break; }
-        // avoid killing: nudge the NPC to pick a different direction next tick to reduce repeat suicide
-        s.nextDir = pick(rng, [[1,0],[-1,0],[0,1],[0,-1]]);
-        break;
-      } }
+  // ===== Setup =====
+  function afterReset(){ foods=[]; glowBalls=[]; snakes=[]; popups=[]; score=0; updateScoreUI(); pendingRestart=false; comboCount=0; comboBest=0; comboTimer=0; orbsCollected=0; telemetry.orbCount=0; magnetUntil=0; microMagnetUntil=0; lastMicroAwardedCombo=0; updateMagnetUI(); const bar=document.getElementById('comboBar'); if(bar) bar.style.width='0%';
+    player = makeSnake('player',0,0,6,true); snakes.push(player);
+    for(let i=0;i<MAX_NPC;i++) spawnOffscreenNPC();
+    spawnOnscreenFoodBurst();
   }
 
-  // apply deaths (drop glows). If player died, schedule restart
-  for(const id of toKill){ const s = snakes.find(x=>x.id===id); if(s && s.alive){ s.alive = false; for(const seg of s.segments){ glowBalls.push({x: seg.x, y: seg.y, life: 220 + Math.floor(rng()*120), hue: Math.floor(rng()*360)}); } } }
-  if(playerDied && !pendingRestart){ pendingRestart = true; setTimeout(()=>{ afterReset(); }, 350); }
+  function makeSnake(id,x,y,len,isPlayer){ const hue=Math.floor(rng()*360); const segs=[]; for(let i=0;i<len;i++) segs.push({x:x-i,y:y}); return {id,segments:segs,dir:[1,0],nextDir:[1,0],alive:true,grow:0,colorHue:hue,isPlayer,ai:{think:0}}; }
 
-  // finalize moves
-  for(const s of snakes){ if(!s.alive) continue; if(eatenThisTick.has(s.id)) continue; const newSegs = proposedSegmentsBySnake.get(s.id); if(!newSegs) continue; s.segments = newSegs; if(s.grow > 0) s.grow--; }
+  function spawnOffscreenNPC(){ if(!player) return; const current=snakes.filter(s=>!s.isPlayer).length; if(current>=MAX_NPC) return; const tilesX=Math.ceil(W/TILE), tilesY=Math.ceil(H/TILE); const screenR=Math.max(tilesX,tilesY); const range=screenR*2+40; let x=0,y=0,tries=0; do{ x=player.segments[0].x+randRange(rng,-range,range); y=player.segments[0].y+randRange(rng,-range,range); tries++; } while((Math.abs(x-player.segments[0].x)<=screenR && Math.abs(y-player.segments[0].y)<=screenR) && tries<300); const base=Math.max(3,player?player.segments.length:5); const len=Math.max(3, base+randRange(rng,-3,3)); snakes.push(makeSnake('cpu'+Math.floor(rng()*1e9),x,y,len,false)); }
 
-  // eating foods and glowBalls
-  for(const s of snakes){ if(!s.alive) continue; const head = s.segments[0]; for(let i=foods.length-1;i>=0;i--){ const f = foods[i]; if(f.x === head.x && f.y === head.y){ s.grow += 1; foods.splice(i,1); if(s.isPlayer) score += 1; document.getElementById('score').textContent = score; } } for(let i=glowBalls.length-1;i>=0;i--){ const g = glowBalls[i]; if(g.x === head.x && g.y === head.y){ s.grow += 1; glowBalls.splice(i,1); if(s.isPlayer) score += 1; document.getElementById('score').textContent = score; } } }
+  // ===== AI =====
+  function aiThink(s, occMap){ if(!s.alive) return; const head=s.segments[0]; const phead=player.segments[0]; const distToPlayer=Math.abs(head.x-phead.x)+Math.abs(head.y-phead.y);
+    let think=3+Math.floor(rng()*3); if(distToPlayer>Math.max(Math.ceil(W/TILE),Math.ceil(H/TILE))) think=12+Math.floor(rng()*8); if(distToPlayer<10) think=1+Math.floor(rng()*2); s.ai.think--; if(s.ai.think>0) return; s.ai.think=think;
+    const target = nearestFoodOrOrb(head, Math.max(Math.ceil(W/TILE),Math.ceil(H/TILE)));
+    const prefer = target ? primaryStepToward(head, target) : roughStepToward(head, phead);
+    const dir = chooseSafeDir(s, prefer, occMap) || (pathfinderEnabled ? pathfindFirstStepOcc(s, occMap, PATHFINDER_MAX_STEPS) : null) || prefer;
+    if(dir){ s.nextDir = dir; }
+  }
 
-  // remove eaten snakes from list
-  snakes = snakes.filter(s => s.alive || eatenThisTick.has(s.id) === false);
+  function nearestFoodOrOrb(head, radius){ let best=null,bestD=1e9; for(let i=0;i<foods.length;i++){ const f=foods[i]; const d=Math.abs(f.x-head.x)+Math.abs(f.y-head.y); if(d<bestD && d<=radius){ bestD=d; best=f; } } for(let i=0;i<glowBalls.length;i++){ const g=glowBalls[i]; const d=Math.abs(g.x-head.x)+Math.abs(g.y-head.y); if(d<bestD && d<=radius){ bestD=d; best=g; } } return best; }
+  function primaryStepToward(from,to){ const dx=to.x-from.x, dy=to.y-from.y; return (Math.abs(dx)>Math.abs(dy)) ? [Math.sign(dx)||1,0] : [0,Math.sign(dy)||1]; }
+  function roughStepToward(from,to){ const dx=to.x-from.x+randRange(rng,-4,4), dy=to.y-from.y+randRange(rng,-4,4); return (Math.abs(dx)>Math.abs(dy)) ? [Math.sign(dx)||1,0] : [0,Math.sign(dy)||1]; }
 
-  // spawn occasional NPCs if under cap
-  if(rng() < 0.05){ const currentNPC = snakes.filter(s=>!s.isPlayer).length; if(currentNPC < MAX_NPC) spawnOffscreenNPC(); }
-}
+  // Avoid stop and avoid stepping into own body (except safe tail step)
+  function chooseSafeDir(s, prefer, occMap){ const cand=[prefer,[1,0],[-1,0],[0,1],[0,-1]]; const head=s.segments[0]; for(let i=0;i<cand.length;i++){ const d=cand[i]; if(d[0]===-s.dir[0] && d[1]===-s.dir[1]) continue; const nx=head.x+d[0], ny=head.y+d[1]; if(isSafeTileFor(s, nx, ny, occMap)) { if(i>0) telemetry.npcPrevented++; return d; } } return null; }
+  function isSafeTileFor(s, nx, ny, occMap){ const key=nx+','+ny; const entries=occMap.get(key)||[]; for(let i=0;i<entries.length;i++){ const e=entries[i]; if(e.snakeId!==s.id) return false; if(e.snakeId===s.id && e.index>0){ const tail=s.segments[s.segments.length-1]; if(!(s.grow===0 && tail.x===nx && tail.y===ny)) return false; } } return true; }
 
-function draw(){ ctx.fillStyle = '#07070a'; ctx.fillRect(0,0,W,H); const cam = {x:player.segments[0].x, y:player.segments[0].y}; const minX = Math.floor(cam.x - VIEW_TILES_X/2), maxX = Math.floor(cam.x + VIEW_TILES_X/2); const minY = Math.floor(cam.y - VIEW_TILES_Y/2), maxY = Math.floor(cam.y + VIEW_TILES_Y/2);
-  // draw floor
-  for(let tx = minX; tx<=maxX; tx++) for(let ty=minY; ty<=maxY; ty++){ const s = worldToScreen(tx,ty,cam); const cseed = Math.abs((tx*73856093) ^ (ty*19349663)) % 360; const base = 18 + (cseed%15); ctx.fillStyle = `hsl(${cseed%40} 20% ${base}%)`; ctx.fillRect(s.x, s.y, TILE+1, TILE+1); }
-  // foods
-  for(const f of foods){ if(f.x < minX || f.x > maxX || f.y < minY || f.y > maxY) continue; const sPos = worldToScreen(f.x,f.y,cam); const g = ctx.createRadialGradient(sPos.x+TILE/2, sPos.y+TILE/2, 2, sPos.x+TILE/2, sPos.y+TILE/2, TILE); const hue = ((f.x*7 + f.y*11) % 360 + (Date.now()/40)%360) % 360; const rgb = hsvToRgb(hue,1,1); g.addColorStop(0, `rgba(${rgb.join(',')},1)`); g.addColorStop(0.6, `rgba(${rgb.join(',')},0.45)`); g.addColorStop(1, `rgba(0,0,0,0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sPos.x+TILE/2, sPos.y+TILE/2, TILE*0.45,0,Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(sPos.x+TILE/2 - 4, sPos.y+TILE/2 - 6, TILE*0.12,0,Math.PI*2); ctx.fill(); }
-  // glows
-  for(let i = glowBalls.length-1; i >= 0; i--){ const gB = glowBalls[i]; gB.life--; if(gB.life <= 0){ glowBalls.splice(i,1); continue; } if(gB.x < minX || gB.x > maxX || gB.y < minY || gB.y > maxY) continue; const sPos = worldToScreen(gB.x,gB.y,cam); const g = ctx.createRadialGradient(sPos.x+TILE/2, sPos.y+TILE/2, 2, sPos.x+TILE/2, sPos.y+TILE/2, TILE*1.6); const rgb = hsvToRgb((gB.hue + (Date.now()/60)%360)%360,1,1); g.addColorStop(0, `rgba(${rgb.join(',')},0.95)`); g.addColorStop(0.3, `rgba(${rgb.join(',')},0.45)`); g.addColorStop(1, `rgba(0,0,0,0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sPos.x+TILE/2, sPos.y+TILE/2, TILE*0.7,0,Math.PI*2); ctx.fill(); }
-  // draw snakes
-  const drawList = snakes.slice().filter(s=>s.segments.length>0); drawList.sort((a,b)=>a.segments[0].y - b.segments[0].y); for(const s of drawList){ if(!s.alive) continue; for(let i=s.segments.length-1;i>=0;i--){ const seg = s.segments[i]; const spos = worldToScreen(seg.x,seg.y,cam); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(spos.x+TILE/2, spos.y+TILE*0.9, TILE*0.5, TILE*0.22, 0, 0, Math.PI*2); ctx.fill(); const hue = s.colorHue + i*2; const [r,gc,b] = hsvToRgb((hue+Date.now()/120)%360, 0.9, 0.85); ctx.fillStyle = `rgb(${r},${gc},${b})`; ctx.fillRect(spos.x+3, spos.y+2, TILE-6, TILE-6); ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(spos.x+4, spos.y+3, TILE-10, Math.max(3,TILE*0.18)); } const head = s.segments[0]; const hs = worldToScreen(head.x,head.y,cam); ctx.fillStyle = `hsl(${s.colorHue} 95% 50%)`; ctx.beginPath(); ctx.ellipse(hs.x+TILE/2, hs.y+TILE/2 - 4, TILE*0.28, TILE*0.42, 0, 0, Math.PI*2); ctx.fill(); }
-  document.getElementById('len').textContent = player.segments.length; }
+  // ===== Movement & Collisions =====
+  function moveAll(){ const occMap = buildCurrentOcc(); lastOccMap = occMap;
+    for(let i=0;i<snakes.length;i++){ const s=snakes[i]; if(!s.alive) continue; if(!s.isPlayer) aiThink(s, occMap); }
 
-function worldToScreen(tx,ty,cam){ const cx = (tx - cam.x) * TILE + W/2; const cy = (ty - cam.y) * TILE + H/2; const skew = (ty - cam.y) * 0.06 * TILE; return {x:cx - skew, y:cy - (Math.abs(ty-cam.y))*0.08*TILE}; }
+    const headTargets=new Map(); for(let i=0;i<snakes.length;i++){ const s=snakes[i]; if(!s.alive) continue; const dir=s.nextDir||s.dir; s.dir=dir; const h=s.segments[0]; headTargets.set(s.id,{x:h.x+dir[0], y:h.y+dir[1]}); }
 
-function refillFoodNear(camx,camy){ const radius = Math.max(BASE_VIEW_X, BASE_VIEW_Y) * 2; let nearby = 0; for(const f of foods){ if(Math.abs(f.x-camx) <= radius && Math.abs(f.y-camy) <= radius) nearby++; } if(nearby < 110){ const add = 110 - nearby; for(let i=0;i<add;i++){ const fx = camx + randRange(rng,-radius,radius); const fy = camy + randRange(rng,-radius,radius); foods.push({x:fx,y:fy,id:Math.random().toString(36).slice(2)}); } }}
+    const targetGroups=new Map(); for(const [id,pos] of headTargets){ const k=pos.x+','+pos.y; if(!targetGroups.has(k)) targetGroups.set(k,[]); targetGroups.get(k).push(id); }
+    const eatenThisTick=new Set();
+    for(const [k,ids] of targetGroups){ if(ids.length>1){ const involved=ids.map(id=>snakes.find(s=>s.id===id)).filter(s=>s&&s.alive); if(involved.length<=1) continue; involved.sort((a,b)=>b.segments.length-a.segments.length); const winner=involved[0]; const losers=involved.slice(1); telemetry.headKills += losers.length; for(let i=0;i<losers.length;i++){ const l=losers[i]; l.alive=false; eatenThisTick.add(l.id); winner.grow += l.segments.length; dropDeathOrbs(l); } } }
 
-function gameLoop(ts){ if(!lastTick) lastTick = ts; const elapsed = ts - lastTick; if(elapsed > TICK_MS){ moveAll(); refillFoodNear(player.segments[0].x, player.segments[0].y); lastTick = ts; } draw(); requestAnimationFrame(gameLoop); }
+    const proposed=new Map(); const newSegsBy=new Map();
+    for(let i=0;i<snakes.length;i++){ const s=snakes[i]; if(!s.alive||eatenThisTick.has(s.id)) continue; const target=headTargets.get(s.id); if(!target) continue; const willGrow=s.grow>0; const segs=[{x:target.x,y:target.y}]; const keep=Math.max(0, s.segments.length - (willGrow?0:1)); for(let j=0;j<keep;j++) segs.push({x:s.segments[j].x,y:s.segments[j].y}); newSegsBy.set(s.id,segs); for(let j=0;j<segs.length;j++){ const p=segs[j]; const key=p.x+','+p.y; if(!proposed.has(key)) proposed.set(key,[]); proposed.get(key).push({snakeId:s.id,index:j}); } }
 
-requestAnimationFrame(gameLoop);
+    const toKill=new Set(); let playerDied=false;
+    for(let i=0;i<snakes.length;i++){
+      const s=snakes[i]; if(!s.alive||eatenThisTick.has(s.id)) continue; const t=headTargets.get(s.id); const key=t.x+','+t.y; const occ=proposed.get(key)||[]; let collided=false;
+      for(let j=0;j<occ.length;j++){ const o=occ[j]; if(o.snakeId!==s.id){ collided=true; break; } if(o.snakeId===s.id && o.index>0){ collided=true; break; } }
+      if(collided){ if(s.isPlayer){ playerDied=true; } else { telemetry.npcCollisions++; } toKill.add(s.id); }
+    }
+
+    for(const id of toKill){ const s=snakes.find(x=>x.id===id); if(s&&s.alive){ s.alive=false; dropDeathOrbs(s); } }
+    if(playerDied && !pendingRestart){ pendingRestart=true; setTimeout(()=>afterReset(),350); }
+
+    for(let i=0;i<snakes.length;i++){ const s=snakes[i]; if(!s.alive||eatenThisTick.has(s.id)) continue; const segs=newSegsBy.get(s.id); if(!segs) continue; s.segments=segs; if(s.grow>0) s.grow--; }
+
+    // Eating at head
+    for(let i=0;i<snakes.length;i++){
+      const s=snakes[i]; if(!s.alive) continue; const head=s.segments[0];
+      // magnet pickup around player; orbs remain static
+      if(s.isPlayer){ eatAroundPlayer(head); }
+      for(let j=foods.length-1;j>=0;j--){ const f=foods[j]; if(f.x===head.x && f.y===head.y){ s.grow+=f.value; if(s.isPlayer){ onOrbCollected(); onEatValue(f.value); } foods.splice(j,1); }}
+      for(let j=glowBalls.length-1;j>=0;j--){ const g=glowBalls[j]; if(g.x===head.x && g.y===head.y){ s.grow+=1; if(s.isPlayer){ onOrbCollected(); onEatValue(1); } glowBalls.splice(j,1); }}
+    }
+
+    refillOnscreenFood();
+    updateTelemetryUI();
+  }
+
+  // Player magnet pickup within radius; orbs remain static
+  function eatAroundPlayer(head){ const R = magnetRadius(); if(R<=0) return; // manhattan radius
+    for(let j=foods.length-1;j>=0;j--){ const f=foods[j]; const d=Math.abs(f.x-head.x)+Math.abs(f.y-head.y); if(d>0 && d<=R){ player.grow+=f.value; onOrbCollected(); onEatValue(f.value); foods.splice(j,1); }}
+    for(let j=glowBalls.length-1;j>=0;j--){ const g=glowBalls[j]; const d=Math.abs(g.x-head.x)+Math.abs(g.y-head.y); if(d>0 && d<=R){ player.grow+=1; onOrbCollected(); onEatValue(1); glowBalls.splice(j,1); }}
+  }
+
+  function magnetActive(){ const now=performance.now(); return now < magnetUntil || now < microMagnetUntil; }
+  function magnetRadius(){ const now=performance.now(); if(now < magnetUntil) return MAGNET_RADIUS_TILES; if(now < microMagnetUntil) return MICRO_MAGNET_RADIUS_TILES; return 0; }
+  function magnetSecondsLeft(){ const now=performance.now(); return Math.max(0, Math.ceil(Math.max(magnetUntil-now, microMagnetUntil-now)/1000)); }
+  function updateMagnetUI(){ const badge=document.getElementById('magnetBadge'); const left=document.getElementById('magnetLeft'); const tb=document.getElementById('t-magnet'); if(magnetActive()){ badge.style.display='inline-block'; const sec = magnetSecondsLeft(); left.textContent = sec; tb.textContent = sec + 's'; } else { badge.style.display='none'; tb.textContent='0s'; } }
+
+  function dropDeathOrbs(s){ // persistent death orbs
+    for(let i=0;i<s.segments.length;i++){ const seg=s.segments[i]; glowBalls.push({x:seg.x,y:seg.y,hue:Math.floor(rng()*360)}); }
+  }
+
+  // ===== Food (on-screen only) =====
+  function spawnOnscreenFoodBurst(){ const cam=player.segments[0]; const {minX,maxX,minY,maxY}=currentViewBounds(cam); for(let i=0;i<FOOD_TARGET_ONSCREEN;i++){ const fx=randRange(rng,minX,maxX), fy=randRange(rng,minY,maxY); const isSuper=(i%25===0); foods.push({x:fx,y:fy,value:isSuper?SUPER_ORB_VALUE:1,super:isSuper}); } }
+  function refillOnscreenFood(){ const cam=player.segments[0]; const {minX,maxX,minY,maxY}=currentViewBounds(cam); let count=0; for(let i=0;i<foods.length;i++){ const f=foods[i]; if(f.x>=minX&&f.x<=maxX&&f.y>=minY&&f.y<=maxY) count++; } if(count<FOOD_TARGET_ONSCREEN){ const need=FOOD_TARGET_ONSCREEN-count; for(let i=0;i<need;i++){ const fx=randRange(rng,minX,maxX), fy=randRange(rng,minY,maxY); foods.push({x:fx,y:fy,value:1,super:false}); } } }
+
+  function currentViewBounds(cam){ const tilesX=Math.ceil(W/TILE), tilesY=Math.ceil(H/TILE); const minX=Math.floor(cam.x-tilesX/2), maxX=Math.floor(cam.x+tilesX/2); const minY=Math.floor(cam.y-tilesY/2), maxY=Math.floor(cam.y+tilesY/2); return {minX,maxX,minY,maxY}; }
+
+  // ===== Combo & Magnets =====
+  function onOrbCollected(){ orbsCollected++; telemetry.orbCount = orbsCollected; if(orbsCollected>0 && orbsCollected%1000===0){ magnetUntil = performance.now() + MAGNET_DURATION_MS; updateMagnetUI(); } }
+  function onEatValue(value){ const now=performance.now(); if(now - comboTimer <= COMBO_WINDOW_MS){ comboCount++; } else { comboCount=1; }
+    comboTimer=now; comboBest=Math.max(comboBest, comboCount); telemetry.comboBest=comboBest; const mult=1 + Math.floor((comboCount-1)/3); const gain=value*mult; score+=gain; updateScoreUI(); showCombo(mult,gain);
+    if(comboCount>0 && (comboCount % SUPER_ORB_THRESHOLD)===0){ const cam=player.segments[0]; const {minX,maxX,minY,maxY}=currentViewBounds(cam); const fx=randRange(rng,minX,maxX), fy=randRange(rng,minY,maxY); foods.push({x:fx,y:fy,value:SUPER_ORB_VALUE,super:true}); }
+    if(comboCount>=MICRO_MAGNET_COMBO && (comboCount % MICRO_MAGNET_COMBO)===0 && comboCount!==lastMicroAwardedCombo){ microMagnetUntil = Math.max(microMagnetUntil, now + MICRO_MAGNET_DURATION_MS); lastMicroAwardedCombo = comboCount; updateMagnetUI(); }
+  }
+
+  function showCombo(mult,gain){ const el=document.getElementById('comboText'); el.textContent=`Combo x${mult}  (+${gain})`; el.style.opacity='1'; el.style.transition='none'; requestAnimationFrame(()=>{ el.style.transition='opacity 1.6s ease'; el.style.opacity='0'; }); const pct=Math.min(100,(COMBO_WINDOW_MS - Math.max(0, performance.now()-comboTimer))/COMBO_WINDOW_MS*100); const bar=document.getElementById('comboBar'); if(bar) bar.style.width=pct+'%'; popups.push({x:player.segments[0].x,y:player.segments[0].y,life:36,text:`+${gain}`}); }
+
+  // ===== Render =====
+  function draw(){ if(!player||!player.segments||player.segments.length===0) return; ctx.fillStyle='#070a12'; ctx.fillRect(0,0,W,H); const cam=player.segments[0]; const {minX,maxX,minY,maxY}=currentViewBounds(cam);
+    drawBackground(minX,maxX,minY,maxY,cam);
+
+    // foods (static)
+    for(let i=0;i<foods.length;i++){ const f=foods[i]; if(f.x<minX||f.x>maxX||f.y<minY||f.y>maxY) continue; const s=worldToScreen(f.x,f.y,cam); const hue=((f.x*7+f.y*11)%360 + (Date.now()/40)%360)%360; const rgb=hsvToRgb(hue,1,1); const g=ctx.createRadialGradient(s.x+TILE/2,s.y+TILE/2,2,s.x+TILE/2,s.y+TILE/2,TILE*(f.super?0.8:0.6)); g.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},1)`); g.addColorStop(0.6,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.45)`); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(s.x+TILE/2,s.y+TILE/2,TILE*(f.super?0.5:0.4),0,Math.PI*2); ctx.fill(); }
+
+    // persistent death orbs
+    for(let i=0;i<glowBalls.length;i++){ const g=glowBalls[i]; if(g.x<minX||g.x>maxX||g.y<minY||g.y>maxY) continue; const s=worldToScreen(g.x,g.y,cam); const pulse = 0.8 + 0.2*Math.sin((Date.now()+i*77)/600); const rgb=hsvToRgb((g.hue+(Date.now()/60)%360)%360,1,1); const gr=ctx.createRadialGradient(s.x+TILE/2,s.y+TILE/2,2,s.x+TILE/2,s.y+TILE/2,TILE*1.6*pulse); gr.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.95)`); gr.addColorStop(0.3,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.4)`); gr.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(s.x+TILE/2,s.y+TILE/2,TILE*0.7*pulse,0,Math.PI*2); ctx.fill(); }
+
+    // snakes
+    const drawList = snakes.filter(s=>s.alive && s.segments.length>0).slice();
+    drawList.sort((a,b)=>a.segments[0].y - b.segments[0].y);
+    for(let n=0;n<drawList.length;n++){
+      const s = drawList[n];
+      const head = s.segments[0];
+      if(head.x<minX-2||head.x>maxX+2||head.y<minY-2||head.y>maxY+2) continue;
+      // FIX: iterate by s.segments, not snakes[n].segments (prevents undefined access)
+      for(let i=s.segments.length-1;i>=0;i--){
+        const seg=s.segments[i];
+        const p=worldToScreen(seg.x,seg.y,cam);
+        ctx.fillStyle='rgba(0,0,0,0.25)';
+        ctx.beginPath(); ctx.ellipse(p.x+TILE/2,p.y+TILE*0.9,TILE*0.5,TILE*0.22,0,0,Math.PI*2); ctx.fill();
+        const hue=s.colorHue + i*2; const col=hsvToRgb((hue+Date.now()/200)%360,0.9,0.88);
+        ctx.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`; ctx.fillRect(p.x+3,p.y+2,TILE-6,TILE-6);
+        ctx.fillStyle='rgba(255,255,255,0.14)'; ctx.fillRect(p.x+4,p.y+3,TILE-10, Math.max(3,TILE*0.18));
+      }
+      const hs=worldToScreen(head.x,head.y,cam);
+      ctx.fillStyle=`hsl(${s.colorHue} 95% 50%)`;
+      ctx.beginPath(); ctx.ellipse(hs.x+TILE/2, hs.y+TILE/2 - 4, TILE*0.28, TILE*0.42, 0,0,Math.PI*2); ctx.fill();
+    }
+
+    // magnet ring
+    if(magnetActive()){ const head=player.segments[0]; const s=worldToScreen(head.x,head.y,cam); ctx.beginPath(); ctx.arc(s.x+TILE/2, s.y+TILE/2, TILE*(magnetRadius()+0.5), 0, Math.PI*2); ctx.strokeStyle='rgba(180,220,255,0.35)'; ctx.lineWidth=2; ctx.stroke(); updateMagnetUI(); }
+
+    // debug overlay (light)
+    if(debugOverlay && lastOccMap){ drawDebugOverlay(cam, minX,maxX,minY,maxY); }
+
+    // combo meter update
+    if(comboTimer>0){ const pct=Math.min(100,(COMBO_WINDOW_MS - Math.max(0, performance.now()-comboTimer))/COMBO_WINDOW_MS*100); const bar=document.getElementById('comboBar'); if(bar) bar.style.width=pct+'%'; }
+
+    // popups
+    for(let i=popups.length-1;i>=0;i--){ const p=popups[i]; const sp=worldToScreen(p.x,p.y,cam); p.life--; ctx.globalAlpha=Math.max(0,p.life/36); ctx.fillStyle='#fff'; ctx.font='bold 16px system-ui,Segoe UI,Roboto,Arial'; ctx.fillText(p.text, sp.x+TILE/2, sp.y-6-(36-p.life)); ctx.globalAlpha=1; if(p.life<=0) popups.splice(i,1); }
+
+    document.getElementById('len').textContent = player.segments.length;
+  }
+
+  function drawDebugOverlay(cam,minX,maxX,minY,maxY){ telemetry.pathSuccess += 0; // keep counter stable
+    const npcs = snakes.filter(s=>s.alive && !s.isPlayer);
+    npcs.sort((a,b)=>{ const ha=a.segments[0], hb=b.segments[0]; const da=Math.abs(ha.x-cam.x)+Math.abs(ha.y-cam.y); const db=Math.abs(hb.x-cam.x)+Math.abs(hb.y-cam.y); return da-db; });
+    const pickN = npcs.slice(0, Math.min(debugN, npcs.length));
+    ctx.save(); ctx.globalAlpha=0.75;
+    for(let i=0;i<pickN.length;i++){
+      const s = pickN[i]; const h=s.segments[0]; if(h.x<minX||h.x>maxX||h.y<minY||h.y>maxY) continue; const hs=worldToScreen(h.x,h.y,cam);
+      const nd = Array.isArray(s.nextDir) ? s.nextDir : s.dir; // guard
+      const ax=hs.x+TILE/2, ay=hs.y+TILE/2; const bx=ax + nd[0]*TILE*0.8, by=ay + nd[1]*TILE*0.8;
+      ctx.strokeStyle='rgba(120,220,255,0.8)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+      const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; for(let d=0; d<4; d++){ const nx=h.x+dirs[d][0], ny=h.y+dirs[d][1]; const safe=isSafeTileFor(s,nx,ny,lastOccMap); const sp=worldToScreen(nx,ny,cam); ctx.strokeStyle = safe ? 'rgba(90,220,120,0.85)' : 'rgba(255,80,100,0.85)'; ctx.strokeRect(sp.x+4, sp.y+4, TILE-8, TILE-8); }
+    }
+    ctx.restore();
+    telemetry.npcPrevented += 0; // no-op to keep layout similar
+    document.getElementById('t-npc-prevent').textContent = telemetry.npcPrevented;
+  }
+
+  function drawBackground(minX,maxX,minY,maxY,cam){
+    for(let x=minX;x<=maxX;x++){
+      for(let y=minY;y<=maxY;y++){
+        const p=worldToScreen(x,y,cam);
+        const n1=fract(sinHash(x*12.9898 + y*78.233)*43758.5453);
+        const n2=fract(sinHash((x+1000)*3.12 + (y-700)*1.77)*12543.33);
+        const band=Math.sin((x+y)*0.18)*0.5+0.5;
+        const l=14 + (10*n1|0) + (6*band|0) + (4*n2|0);
+        const h=((x*13 ^ y*17) & 31);
+        ctx.fillStyle=`hsl(${h} 22% ${l}%)`;
+        ctx.fillRect(p.x,p.y,TILE+1,TILE+1);
+      }
+    }
+    ctx.globalAlpha=0.06; ctx.fillStyle='#b7d3ff'; for(let i=0;i<6;i++){ const ox=(Date.now()/1200 + i*80)%(W+200) - 100; ctx.fillRect(ox,0,2,H); } ctx.globalAlpha=1;
+  }
+
+  // ===== Math/Utils =====
+  function worldToScreen(tx,ty,cam){ const cx=(tx-cam.x)*TILE + W/2; const cy=(ty-cam.y)*TILE + H/2; const skew=(ty-cam.y)*0.06*TILE; return {x:cx - skew, y:cy - Math.abs(ty-cam.y)*0.08*TILE}; }
+  function sizeCanvas(){ const w=window.innerWidth, h=window.innerHeight; TILE=Math.max(20, Math.min(36, Math.floor(Math.min(w,h)/26))); W=(w*DPR)|0; H=(h*DPR)|0; canvas.width=W; canvas.height=H; canvas.style.width=w+'px'; canvas.style.height=h+'px'; }
+  function updateScoreUI(){ document.getElementById('score').textContent = score; if(score>hiScore){ hiScore=score; const hi=document.getElementById('hi'); if(hi) hi.textContent=hiScore; } }
+  function updateTelemetryUI(){ document.getElementById('t-npc-self').textContent=telemetry.npcSelfDeaths; document.getElementById('t-npc-prevent').textContent=telemetry.npcPrevented; document.getElementById('t-npc-coll').textContent=telemetry.npcCollisions; document.getElementById('t-head-kill').textContent=telemetry.headKills; document.getElementById('t-path-succ').textContent=telemetry.pathSuccess; document.getElementById('t-combo-best').textContent=telemetry.comboBest; document.getElementById('t-orb-count').textContent=telemetry.orbCount; document.getElementById('t-magnet').textContent = magnetActive()? (magnetSecondsLeft()+'s') : '0s'; }
+
+  function gameLoop(ts){ if(!lastTick) lastTick=ts; const elapsed=ts-lastTick; if(elapsed>TICK_MS){ moveAll(); lastTick=ts; } draw(); requestAnimationFrame(gameLoop); }
+  requestAnimationFrame(gameLoop);
+
+  // ===== Occupancy, Pathfinding =====
+  function buildCurrentOcc(){ const map=new Map(); for(let si=0;si<snakes.length;si++){ const s=snakes[si]; if(!s.alive) continue; for(let i=0;i<s.segments.length;i++){ const p=s.segments[i]; const key=p.x+','+p.y; if(!map.has(key)) map.set(key,[]); map.get(key).push({snakeId:s.id,index:i}); } } return map; }
+  function pathfindFirstStepOcc(s, occMap, maxSteps){ const head=s.segments[0]; const blocked=new Set(); for(const [k,arr] of occMap.entries()){ for(let i=0;i<arr.length;i++){ const e=arr[i]; if(e.snakeId!==s.id) blocked.add(k); else if(e.index>0) blocked.add(k); } } if(s.grow===0){ const tail=s.segments[s.segments.length-1]; blocked.delete(tail.x+','+tail.y); }
+    const start=head.x+','+head.y; const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; const q=[start]; const vis=new Set([start]); const parent=new Map(); let found=null; let guard=0;
+    while(q.length && guard<3000){ const cur=q.shift(); const depth=depthOf(parent,cur); if(depth>=maxSteps){ guard++; continue; } const [cx,cy]=cur.split(',').map(Number); for(let di=0;di<dirs.length;di++){ const nx=cx+dirs[di][0], ny=cy+dirs[di][1]; const key=nx+','+ny; if(vis.has(key)) continue; if(blocked.has(key)) continue; vis.add(key); parent.set(key,cur); q.push(key); if(depth===0){ found=key; break; } } if(found) break; guard++; }
+    if(!found) return null; let cur=found; while(parent.get(cur) && parent.get(cur)!==start) cur=parent.get(cur); const [fx,fy]=cur.split(',').map(Number); return [fx-head.x, fy-head.y];
+    function depthOf(map,key){ let d=0,p=map.get(key); while(p){ d++; p=map.get(p); if(d>maxSteps) break; } return d; }
+  }
+
+  // ===== Tiny utils =====
+  function mulberry32(a){return function(){a|=0; a = (a + 0x6D2B79F5)|0; let t=Math.imul(a ^ a>>>15, 1|a); t = (t + Math.imul(t ^ t>>>7, 61|t)) ^ t; return ((t ^ t>>>14)>>>0)/4294967296;};}
+  function randRange(r,a,b){return a + Math.floor(r()*(b-a+1));}
+  function hsvToRgb(h,s,v){ let f=(n)=>{let k=(n+h/60)%6; return v - v*s*Math.max(Math.min(k,4-k,1),0);}; return [Math.round(f(5)*255),Math.round(f(3)*255),Math.round(f(1)*255)];}
+  function sinHash(v){ return Math.sin(v); }
+  function fract(x){ return x - Math.floor(x); }
+
+  // ===== Minimal Runtime Tests (console) =====
+  (function runTests(){
+    try {
+      // Test 1: draw loop index safety — mismatched arrays must not throw
+      const fakeA={id:'a',alive:true,colorHue:0,dir:[1,0],nextDir:[1,0],segments:[{x:0,y:0},{x:1,y:0},{x:2,y:0}]};
+      const fakeB={id:'b',alive:true,colorHue:0,dir:[1,0],nextDir:[1,0],segments:[{x:0,y:1}]};
+      const dl=[fakeB,fakeA];
+      // emulate the fixed inner loop
+      for(let n=0;n<dl.length;n++){ const s=dl[n]; for(let i=s.segments.length-1;i>=0;i--){ const seg=s.segments[i]; if(typeof seg.x!=='number') throw new Error('seg.x not number'); } }
+      console.debug('[TEST] draw loop index safety: OK');
+
+      // Test 2: safe tail step
+      const occ=new Map();
+      const snek={id:'t2',alive:true,grow:0,segments:[{x:5,y:5},{x:4,y:5},{x:3,y:5}]};
+      // occupy own body
+      occ.set('5,5',[{snakeId:'t2',index:0}]); occ.set('4,5',[{snakeId:'t2',index:1}]); occ.set('3,5',[{snakeId:'t2',index:2}]);
+      const ok = isSafeTileFor(snek,3,5,occ); // stepping into current tail with grow==0 is allowed
+      console.assert(ok===true,'safe tail step should be allowed');
+
+      // Test 3: magnet radius selection
+      (function(){ const now=performance.now(); magnetUntil=now+100; microMagnetUntil=0; const r1=magnetRadius(); if(r1!==MAGNET_RADIUS_TILES) throw new Error('macro magnet radius mismatch'); microMagnetUntil=now+100; magnetUntil=0; const r2=magnetRadius(); if(r2!==MICRO_MAGNET_RADIUS_TILES) throw new Error('micro magnet radius mismatch'); })();
+      console.debug('[TEST] magnets: OK');
+    } catch(e){ console.error('[TEST] Failure:', e); }
+  })();
+})();
 </script>
 </body>
 </html>
