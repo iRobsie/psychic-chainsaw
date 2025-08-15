@@ -2,227 +2,559 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Repo Browser</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Repo Browser — IndexedDB Cache</title>
+  <meta name="referrer" content="no-referrer" />
   <style>
-    :root { --w: 920px; --pad: 12px; }
-    * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Helvetica, Arial; margin: 0; }
-    header { padding: 16px; border-bottom: 1px solid #ddd; }
-    main { max-width: var(--w); margin: 0 auto; padding: 16px; }
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .meta { color: #555; font-size: 14px; }
-    .controls { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
-    input[type="search"] { padding: 8px; width: min(380px, 100%); }
-    button { padding: 8px 12px; border: 1px solid #ccc; background: #fafafa; cursor: pointer; border-radius: 6px; }
-    button:disabled { opacity: .6; cursor: not-allowed; }
-    .crumbs { font-size: 14px; margin: 6px 0 0; word-break: break-all; }
-    .list { border: 1px solid #e5e5e5; border-radius: 8px; overflow: hidden; }
-    .item { display: grid; grid-template-columns: 28px 1fr auto auto; gap: 10px; padding: 10px var(--pad); align-items: center; border-top: 1px solid #f1f1f1; }
-    .item:first-child { border-top: 0; }
-    .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .size, .updated { color: #666; font-size: 12px; }
-    .icon { text-align: center; }
-    .icon span { display: inline-block; width: 20px; }
-    .empty { padding: 16px; color: #666; }
-    .footer { margin-top: 24px; color: #666; font-size: 12px; }
-    code.inline { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; }
-    a { text-decoration: none; color: #0366d6; }
-    a:hover { text-decoration: underline; }
-    .pill { padding: 2px 8px; border: 1px solid #ddd; border-radius: 999px; font-size: 12px; color: #444; }
+    :root{--maxw:1200px;--gap:12px;--muted:#6b7280;--accent:#0f62fe;--radius:12px;--ui-font:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial}
+    *{box-sizing:border-box} body{margin:0;font-family:var(--ui-font);background:linear-gradient(#f7f9fc,#fff);padding:28px;display:flex;justify-content:center}
+    .shell{width:100%;max-width:var(--maxw);border-radius:14px;background:#fff;border:1px solid rgba(16,24,40,0.04);box-shadow:0 12px 30px rgba(16,24,40,0.06);overflow:hidden}
+    header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid rgba(16,24,40,0.03)}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;color:white;background:linear-gradient(135deg,var(--accent),#7c3aed);font-weight:700}
+    .title{font-weight:600}
+    .controls{display:flex;gap:8px;align-items:center}
+    .search{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid rgba(16,24,40,0.04);min-width:220px}
+    .search input{border:0;background:transparent;outline:0;width:240px}
+    .btn{padding:8px 10px;border-radius:10px;border:1px solid rgba(16,24,40,0.06);background:#fff;cursor:pointer}
+    .pill{padding:6px 10px;border-radius:999px;border:1px solid rgba(16,24,40,0.04);background:transparent;color:var(--muted)}
+    .content{display:grid;grid-template-columns:1fr 420px;gap:18px;padding:18px}
+    @media(max-width:1000px){.content{grid-template-columns:1fr}}
+    .explorer{padding:12px;border-radius:12px;background:linear-gradient(180deg,#fff,#fbfdff);min-height:360px}
+    .crumbs{font-size:13px;color:var(--muted);margin-bottom:8px;word-break:break-all}
+    .controls-inline{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+    .list{border-radius:10px;border:1px solid rgba(16,24,40,0.03);overflow:hidden}
+    .list .head{display:grid;grid-template-columns:38px 1fr 110px 120px;padding:12px 14px;color:var(--muted);font-size:13px;border-bottom:1px solid rgba(16,24,40,0.03)}
+    .rows{max-height:520px;overflow:auto}
+    .row{display:grid;grid-template-columns:38px 1fr 110px 120px;padding:12px 14px;border-top:1px solid rgba(16,24,40,0.02);align-items:center}
+    .row:hover{background:linear-gradient(90deg, rgba(15,98,254,0.02), transparent)}
+    .name strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ic{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:rgba(15,98,254,0.04);color:var(--accent);font-weight:600}
+    .preview{padding:14px;border-radius:12px;background:linear-gradient(180deg,#fff,#fbfdff);min-height:360px;display:flex;flex-direction:column}
+    .preview-body{flex:1;overflow:auto;border-radius:8px;padding:10px;border:1px dashed rgba(16,24,40,0.04);background:#fff}
+    pre.code{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,'Roboto Mono',monospace;font-size:13px}
+    .muted-sm{font-size:12px;color:var(--muted)}
+    .spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(0,0,0,0.08);border-top-color:var(--accent);animation:spin 1s linear infinite;display:inline-block}
+    @keyframes spin{to{transform:rotate(360deg)}}
   </style>
 </head>
 <body>
-  <header>
-    <div class="row">
-      <strong id="title">GitHub Pages File Browser</strong>
-      <span class="pill" id="repo-pill"></span>
-      <span class="pill" id="branch-pill"></span>
-    </div>
-    <div class="crumbs" id="breadcrumbs"></div>
-  </header>
+  <div class="shell" id="app" data-owner="" data-repo="" data-branch="">
+    <header>
+      <div class="brand">
+        <div class="logo">RB</div>
+        <div>
+          <div class="title">Repo Browser</div>
+          <div class="muted-sm" id="repoSub">—</div>
+        </div>
+      </div>
+      <div class="controls" role="region" aria-label="controls">
+        <div class="search" title="Filter (f focuses)">
+          <input id="q" placeholder="Filter (ext:css or text)" aria-label="search" />
+          <div class="pill muted-sm" id="statsPill">—</div>
+        </div>
+        <button class="btn" id="upBtn" title="Up">Up</button>
+        <button class="btn" id="rootBtn" title="Root">Root</button>
+        <div class="pill" id="repoPill">—</div>
+        <button class="btn" id="refreshBtn" title="Refresh">Refresh</button>
+      </div>
+    </header>
 
-  <main>
-    <div class="controls">
-      <input id="search" type="search" placeholder="Filter…" />
-      <button id="upBtn" title="Up one folder">⬆️ Up</button>
-      <button id="rootBtn" title="Root">🏠 Root</button>
-      <a id="viewRawLink" class="pill" href="#" target="_blank" rel="noopener">API link for this folder</a>
-      <span class="meta" id="limitNote"></span>
-    </div>
-    <div class="list" id="list"></div>
-    <div class="footer">
-      Uses the public GitHub Contents API. Private repos won’t work from Pages without an authenticated proxy.
-    </div>
-  </main>
+    <div class="content">
+      <section class="explorer">
+        <div class="crumbs" id="breadcrumbs">/</div>
 
-  <div id="app" data-owner="" data-repo="" data-branch=""></div>
+        <div class="controls-inline">
+          <div class="pill muted-sm" id="branchPill">branch: —</div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <select id="sort" class="pill" title="Sort">
+              <option value="name">name</option><option value="type">type</option><option value="size">size</option>
+            </select>
+            <button class="btn" id="computeBtn">Compute sizes</button>
+          </div>
+        </div>
+
+        <div class="list" id="listRoot">
+          <div class="head"><div></div><div>Name</div><div>Size</div><div>Last modified</div></div>
+          <div class="rows" id="rows"></div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          <a id="apiLink" class="muted-sm inline" target="_blank" rel="noopener">API</a>
+          <div class="muted-sm" style="margin-left:auto" id="limitNote">Unauthenticated ~60 req/hr</div>
+        </div>
+      </section>
+
+      <aside class="preview">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div id="previewTitle" style="font-weight:600">Select a file or folder</div>
+            <div class="muted-sm" id="previewSub">—</div>
+          </div>
+          <div class="actions" id="previewActions"></div>
+        </div>
+        <div class="preview-body" id="previewBody"><div class="muted-sm">No preview</div></div>
+        <div class="muted-sm" id="metaFooter">—</div>
+      </aside>
+    </div>
+  </div>
 
 <script>
-(function () {
-  const $ = (id) => document.getElementById(id);
-  const qs = new URLSearchParams(location.search);
-  const decode = (s) => s.replace(/^\/+|\/+$/g, "");
-  const join = (...parts) => parts.filter(Boolean).join("/").replace(/\/\/+/g, "/");
-  const fmtBytes = (b) => (b == null ? "" :
-    b < 1024 ? `${b} B` :
-    b < 1024**2 ? `${(b/1024).toFixed(1)} KB` :
-    b < 1024**3 ? `${(b/1024**2).toFixed(1)} MB` :
-                  `${(b/1024**3).toFixed(1)} GB`);
-  const icon = (t, name) => {
-    if (t === "dir") return "📁";
-    const ext = (name.split(".").pop() || "").toLowerCase();
-    if (["png","jpg","jpeg","gif","webp","svg"].includes(ext)) return "🖼️";
-    if (["md"].includes(ext)) return "📝";
-    if (["html","htm"].includes(ext)) return "🌐";
-    if (["js","ts","json"].includes(ext)) return "📜";
-    if (["css"].includes(ext)) return "🎨";
-    if (["zip","gz","tgz","rar","7z"].includes(ext)) return "🧩";
-    return "📄";
-  };
+/*
+  IndexedDB caching + repo SHA check.
+  - Key structure:
+      repoKey = owner:repo:branch
+      dirKey  = repoKey:path  -> { items, fetchedAt }
+      metaKey = repoKey:meta  -> { latestSha, checkedAt }
+      rawKey  = repoKey:raw:path -> { text, fetchedAt }
+      sizeKey = repoKey:size:path -> sizeNumber
+  - Decision: before using cached dir, fetch latest branch SHA and compare to meta.latestSha.
+    If matched -> use cache. If different -> fetch fresh and update cache.
+*/
 
-  function inferRepo() {
-    const app = $("app");
-    let owner = qs.get("owner") || app.dataset.owner || "";
-    let repo  = qs.get("repo")  || app.dataset.repo  || "";
-    let branch = qs.get("branch") || app.dataset.branch || "";
+/* --------- Helpers --------- */
+const $ = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const appEl = document.getElementById('app');
+const ownerFromApp = appEl.dataset.owner || '';
+const repoFromApp = appEl.dataset.repo || '';
+const branchFromApp = appEl.dataset.branch || '';
 
-    const host = location.hostname;
-    const path = decode(location.pathname);
+function fmtBytes(b){
+  if (b == null) return '';
+  if (b < 1024) return b + ' B';
+  if (b < 1024**2) return (b/1024).toFixed(1)+' KB';
+  if (b < 1024**3) return (b/1024**2).toFixed(1)+' MB';
+  return (b/1024**3).toFixed(2)+' GB';
+}
+function safe(s){ return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function extOf(name){ return (name.split('.').pop()||'').toLowerCase(); }
+function isTextExt(e){ return ['md','txt','js','ts','json','html','css','py','java','cs','yml','yaml','sh'].includes(e); }
+function isImageExt(e){ return ['png','jpg','jpeg','gif','webp','svg'].includes(e); }
+function mkIcon(type,name){
+  if(type==='dir') return '<div class="ic">📁</div>';
+  const e = extOf(name);
+  if(isImageExt(e)) return '<div class="ic">🖼</div>';
+  return '<div class="ic">📄</div>';
+}
 
-    if (!owner || !repo) {
-      if (host.endsWith("github.io")) {
-        owner = owner || host.split(".")[0];
-        const segs = path.split("/").filter(Boolean);
-        repo = repo || (segs[0] || `${owner}.github.io`);
+/* --------- API url helpers --------- */
+function apiContentsUrl(owner,repo,path,branch){
+  const p = path ? '/' + encodeURIComponent(path).replace(/%2F/g,'/') : '';
+  return `https://api.github.com/repos/${owner}/${repo}/contents${p}?ref=${encodeURIComponent(branch)}`;
+}
+function apiCommitsLatestUrl(owner,repo,branch){
+  // returns latest commit on branch (repo-level)
+  return `https://api.github.com/repos/${owner}/${repo}/commits?per_page=1&sha=${encodeURIComponent(branch)}`;
+}
+function rawUrl(owner,repo,branch,path){
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${path}`;
+}
+
+/* --------- IndexedDB tiny wrapper --------- */
+const IDB_NAME = 'repo-browser-db';
+const IDB_VERSION = 1;
+const IDB_STORE = 'kv';
+
+function openIdb(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(IDB_STORE)){
+        db.createObjectStore(IDB_STORE, { keyPath: 'k' });
       }
-      // For custom domains, pass ?owner=&repo= explicitly.
-    }
-    return { owner, repo, branch };
-  }
-
-  async function pickBranch(owner, repo, preferred) {
-    const tryList = [preferred, "main", "master"].filter(Boolean);
-    for (const br of tryList) if (await pingBranch(owner, repo, br)) return br;
-    try {
-      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
-      if (!res.ok) return null;
-      const meta = await res.json();
-      return meta.default_branch || null;
-    } catch { return null; }
-  }
-  async function pingBranch(owner, repo, branch) {
-    try {
-      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/?ref=${encodeURIComponent(branch)}`);
-      return r.ok;
-    } catch { return false; }
-  }
-
-  function renderBreadcrumbs(basePath, onClick) {
-    const parts = decode(basePath).split("/").filter(Boolean);
-    const nodes = ['<a href="#" data-path="">/</a>'];
-    let acc = "";
-    for (let i = 0; i < parts.length; i++) {
-      acc = join(acc, parts[i]);
-      nodes.push(`<span>/</span><a href="#" data-path="${acc}">${parts[i]}</a>`);
-    }
-    $("breadcrumbs").innerHTML = nodes.join(" ");
-    $("breadcrumbs").querySelectorAll("a").forEach(a => {
-      a.addEventListener("click", (e) => { e.preventDefault(); onClick(a.getAttribute("data-path")); });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbGet(k){
+  try{
+    const db = await openIdb();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const st = tx.objectStore(IDB_STORE);
+      const r = st.get(k);
+      r.onsuccess = () => res(r.result ? r.result.v : undefined);
+      r.onerror = () => rej(r.error);
     });
-  }
-
-  function buildPagesUrl(kind, owner, repo, branch, path) {
-    const isUserSite = location.hostname.endsWith("github.io") && (repo === `${owner}.github.io`);
-    const base = location.origin;
-    if (kind === "view") return isUserSite ? `${base}/${path}` : `${base}/${repo}/${path}`;
-    return `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${path}`;
-  }
-
-  function renderList(items, ctx) {
-    const list = $("list");
-    if (!items || items.length === 0) { list.innerHTML = `<div class="empty">No items.</div>`; return; }
-    list.innerHTML = items.map(x => {
-      const ico = icon(x.type, x.name);
-      const viewHref = x.type === "dir" ? "#" : buildPagesUrl("view", ctx.owner, ctx.repo, ctx.branch, join(ctx.path, x.name));
-      const rawHref  = x.type === "dir" ? "#" : buildPagesUrl("raw",  ctx.owner, ctx.repo, ctx.branch, join(ctx.path, x.name));
-      const nameHtml = x.type === "dir"
-        ? `<a class="name" href="#" data-dir="${x.name}">${x.name}</a>`
-        : `<a class="name" href="${viewHref}" target="_blank" rel="noopener">${x.name}</a> &nbsp;<a href="${rawHref}" target="_blank" rel="noopener" title="Raw">raw</a>`;
-      return `
-      <div class="item">
-        <div class="icon"><span>${ico}</span></div>
-        <div>${nameHtml}</div>
-        <div class="size">${x.type === "dir" ? "" : fmtBytes(x.size)}</div>
-        <div class="updated"></div>
-      </div>`;
-    }).join("");
-    list.querySelectorAll("[data-dir]").forEach(a => {
-      a.addEventListener("click", (e) => { e.preventDefault(); navigate(join(ctx.path, a.getAttribute("data-dir"))); });
+  }catch(e){ return undefined; }
+}
+async function idbPut(k,v){
+  try{
+    const db = await openIdb();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const st = tx.objectStore(IDB_STORE);
+      const r = st.put({ k, v });
+      r.onsuccess = () => res(true);
+      r.onerror = () => rej(r.error);
     });
+  }catch(e){ return false; }
+}
+async function idbDel(k){
+  try{
+    const db = await openIdb();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const st = tx.objectStore(IDB_STORE);
+      const r = st.delete(k);
+      r.onsuccess = () => res(true);
+      r.onerror = () => rej(r.error);
+    });
+  }catch(e){ return false; }
+}
+
+/* --------- State & cache maps --------- */
+let state = { owner:'', repo:'', branch:'', path:'' };
+
+/* --------- UI small helpers --------- */
+function setHeader(owner,repo,branch){
+  $('repoPill').textContent = `${owner}/${repo}`;
+  $('repoSub').textContent = `${owner}/${repo}`;
+  $('branchPill').textContent = `branch: ${branch}`;
+}
+function setApiLink(path){
+  const url = apiContentsUrl(state.owner,state.repo,path || '',state.branch);
+  $('apiLink').href = url;
+  $('apiLink').textContent = url.replace('https://api.github.com/','');
+}
+
+/* --------- Get latest branch SHA --------- */
+async function fetchLatestBranchSha(){
+  try{
+    const url = apiCommitsLatestUrl(state.owner,state.repo,state.branch);
+    const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }});
+    if(!res.ok) return null;
+    const arr = await res.json();
+    return arr && arr[0] && arr[0].sha ? arr[0].sha : null;
+  }catch(e){ return null; }
+}
+
+/* --------- Fetch dir with cache/sha validation --------- */
+async function fetchDirWithCache(path){
+  const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
+  const dirKey = `${repoKey}:dir:${path || ''}`;
+  const metaKey = `${repoKey}:meta`;
+
+  // 1) get cached dir and cached meta
+  const cachedDir = await idbGet(dirKey);
+  const cachedMeta = await idbGet(metaKey);
+
+  // 2) get latest SHA for branch
+  let latestSha = null;
+  try { latestSha = await fetchLatestBranchSha(); } catch(e){ latestSha = null; }
+
+  // If we have cachedDir and cachedMeta.latestSha === latestSha -> use cache
+  if(cachedDir && cachedMeta && cachedMeta.latestSha && latestSha && cachedMeta.latestSha === latestSha){
+    // use cached
+    return { items: cachedDir.items, fromCache: true, latestSha };
   }
 
-  async function getDir(owner, repo, branch, path) {
-    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
-    const res = await fetch(url, { headers: { "Accept": "application/vnd.github.v3+json" }});
-    if (!res.ok) throw new Error(`Failed to load: ${res.status}`);
-    const data = await res.json();
-    if (!Array.isArray(data)) throw new Error("Not a directory");
-    data.sort((a,b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "dir" ? -1 : 1));
-    return data.map(x => ({ name: x.name, type: x.type, size: x.size, path: x.path }));
+  // else, fetch fresh from API, update both dirKey and metaKey
+  const url = apiContentsUrl(state.owner,state.repo,path || '',state.branch);
+  const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }});
+  if(!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
+  const data = await res.json();
+  if(!Array.isArray(data)) throw new Error('Not a directory');
+
+  data.sort((a,b) => (a.type === b.type ? a.name.localeCompare(b.name, undefined, {numeric:true}) : (a.type === 'dir' ? -1 : 1)));
+  const normalized = data.map(x => ({ name: x.name, path: x.path, type: x.type, size: x.size || 0, sha: x.sha, url: x.url, download_url: x.download_url }));
+
+  // Store fresh data and meta (include latestSha if available)
+  await idbPut(dirKey, { items: normalized, fetchedAt: Date.now() });
+  if(latestSha) await idbPut(metaKey, { latestSha, checkedAt: Date.now() });
+
+  return { items: normalized, fromCache: false, latestSha };
+}
+
+/* --------- Fetch raw with cache --------- */
+async function fetchRawTextWithCache(path){
+  const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
+  const rawKey = `${repoKey}:raw:${path}`;
+  const cached = await idbGet(rawKey);
+  if(cached && (Date.now() - (cached.fetchedAt||0) < 1000 * 60 * 60 * 24)) { // 24h fresh
+    return { text: cached.text, fromCache: true };
+  }
+  const raw = rawUrl(state.owner,state.repo,state.branch,path);
+  const res = await fetch(raw);
+  if(!res.ok) throw new Error('raw fetch failed');
+  const txt = await res.text();
+  await idbPut(rawKey, { text: txt, fetchedAt: Date.now() });
+  return { text: txt, fromCache: false };
+}
+
+/* --------- Render rows --------- */
+function renderRows(items){
+  const rows = $('rows');
+  if(!items || items.length === 0){
+    rows.innerHTML = '<div class="row"><div style="grid-column:1/-1;color:var(--muted)">Empty</div></div>';
+    $('statsPill').textContent = '0 items';
+    return;
+  }
+  const sizeSum = items.reduce((s,i)=> s + (i.type==='file' ? (i.size||0) : 0), 0);
+  $('statsPill').textContent = `${items.length} • ${fmtBytes(sizeSum)}`;
+  rows.innerHTML = items.map(it => {
+    const ico = mkIcon(it.type, it.name);
+    const size = it.type==='dir' ? '' : fmtBytes(it.size);
+    return `<div class="row" data-path="${safe(it.path)}" data-type="${it.type}">
+      <div>${ico}</div>
+      <div class="name"><strong title="${safe(it.name)}">${safe(it.name)}</strong><div class="muted-sm" style="margin-left:42px;margin-top:4px">${safe(it.path)}</div></div>
+      <div class="muted-sm" data-size>${size}</div>
+      <div class="muted-sm" data-updated></div>
+    </div>`;
+  }).join('');
+
+  // attach listeners & fetch commit metadata lazily
+  rows.querySelectorAll('.row').forEach(r => {
+    r.addEventListener('click', (ev) => {
+      const path = r.getAttribute('data-path');
+      const type = r.getAttribute('data-type');
+      if(ev.detail === 2){
+        if(type === 'dir') return navigate(path);
+        window.open(rawUrl(state.owner,state.repo,state.branch,path),'_blank');
+        return;
+      }
+      showPreview(path, type);
+    });
+    const p = r.getAttribute('data-path');
+    // fetch last commit for this path (lazy)
+    (async () => {
+      try{
+        const url = `https://api.github.com/repos/${state.owner}/${state.repo}/commits?path=${encodeURIComponent(p)}&per_page=1&sha=${encodeURIComponent(state.branch)}`;
+        const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }});
+        if(!res.ok) return;
+        const arr = await res.json();
+        if(arr && arr[0] && arr[0].commit && arr[0].commit.committer){
+          const d = new Date(arr[0].commit.committer.date);
+          const upd = r.querySelector('[data-updated]');
+          if(upd) upd.textContent = d.toLocaleString();
+        }
+      }catch(e){}
+    })();
+  });
+}
+
+/* --------- Preview --------- */
+async function showPreview(path, type){
+  $('previewTitle').textContent = path.split('/').pop();
+  $('previewSub').textContent = `${type} • ${path}`;
+  $('previewActions').innerHTML = '';
+  setApiLink(path);
+
+  if(type === 'dir'){
+    $('previewBody').innerHTML = `<div style="padding:18px">Folder: <strong>${safe(path)}</strong></div>`;
+    $('previewActions').appendChild(createBtn('Open', () => navigate(path)));
+    $('previewActions').appendChild(createBtn('Open GitHub', () => window.open(`https://github.com/${state.owner}/${state.repo}/tree/${state.branch}/${path}`,'_blank')));
+    const commit = await fetchLastCommit(path);
+    $('metaFooter').textContent = commit ? `${commit.author} • ${new Date(commit.date).toLocaleString()} • ${commit.message}` : '—';
+    return;
   }
 
-  function fuzzyContains(hay, needle) {
-    hay = hay.toLowerCase(); needle = needle.toLowerCase();
-    let i = 0; for (const c of hay) { if (c === needle[i]) i++; if (i === needle.length) return true; }
-    return needle === "" || hay.includes(needle);
+  // file
+  const raw = rawUrl(state.owner,state.repo,state.branch,path);
+  $('previewActions').appendChild(createBtn('Raw', ()=> window.open(raw,'_blank')));
+  $('previewActions').appendChild(createBtn('Copy path', ()=> navigator.clipboard?.writeText(path).then(()=>alert('copied')).catch(()=>alert('copy failed'))));
+
+  if(isImageExt(extOf(path))){
+    $('previewBody').innerHTML = `<img src="${raw}" alt="${safe(path)}" style="max-width:100%;display:block;margin:auto;border-radius:8px"/>`;
+  } else if(isTextExt(extOf(path))){
+    $('previewBody').innerHTML = '<div class="muted-sm">Loading… <span class="spinner"></span></div>';
+    try{
+      const r = await fetchRawTextWithCache(path);
+      $('previewBody').innerHTML = `<pre class="code">${escapeHtml(r.text)}</pre>`;
+    }catch(e){
+      $('previewBody').innerHTML = `<div class="muted-sm">Preview unavailable</div>`;
+    }
+  } else {
+    $('previewBody').innerHTML = `<div class="muted-sm">No preview</div>`;
   }
 
-  let context = { owner: "", repo: "", branch: "", path: "" };
-  let cache = new Map();
+  const commit = await fetchLastCommit(path);
+  $('metaFooter').textContent = commit ? `${commit.author} • ${new Date(commit.date).toLocaleString()} • ${commit.message}` : '—';
+}
+function createBtn(label, onClick){ const b=document.createElement('button'); b.className='btn'; b.textContent=label; b.addEventListener('click', onClick); return b; }
+function escapeHtml(s){ return safe(s).replace(/&lt;/g,'&lt;').replace(/&gt;/g,'&gt;'); }
 
-  async function navigate(path) {
-    context.path = decode(path || "");
-    renderBreadcrumbs(context.path, navigate);
-    $("upBtn").disabled = context.path === "";
-    $("rootBtn").disabled = context.path === "";
-    $("viewRawLink").href = `https://api.github.com/repos/${context.owner}/${context.repo}/contents/${encodeURIComponent(context.path)}?ref=${encodeURIComponent(context.branch)}`;
+/* --------- fetch last commit for arbitrary path --------- */
+async function fetchLastCommit(path){
+  try{
+    const url = `https://api.github.com/repos/${state.owner}/${state.repo}/commits?path=${encodeURIComponent(path)}&per_page=1&sha=${encodeURIComponent(state.branch)}`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }});
+    if(!res.ok) return null;
+    const arr = await res.json();
+    if(arr && arr[0]){
+      return {
+        sha: arr[0].sha,
+        date: arr[0].commit.committer.date,
+        message: arr[0].commit.message,
+        author: arr[0].commit.author ? arr[0].commit.author.name : (arr[0].author ? arr[0].author.login : '')
+      };
+    }
+    return null;
+  }catch(e){ return null; }
+}
 
-    try {
-      const key = `${context.branch}:${context.path}`;
-      let items = cache.get(key);
-      if (!items) { items = await getDir(context.owner, context.repo, context.branch, context.path); cache.set(key, items); }
-      applyFilterAndRender(items);
-    } catch (e) {
-      $("list").innerHTML = `<div class="empty">Error: ${e.message}. Ensure the repo/branch/path exists and is public.</div>`;
+/* --------- compute folder size (recursive) --------- */
+async function computeFolderSize(path){
+  // cautious: this makes many API calls; ask user
+  if(!confirm('Compute sizes recursively? This may make many API calls.')) throw new Error('cancel');
+  let total = 0;
+  async function walk(p){
+    const url = apiContentsUrl(state.owner,state.repo,p || '',state.branch);
+    const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' }});
+    if(!res.ok) throw new Error('API error');
+    const arr = await res.json();
+    if(!Array.isArray(arr)) return;
+    for(const e of arr){
+      if(e.type === 'file') total += e.size || 0;
+      else if(e.type === 'dir') await walk(e.path);
     }
   }
+  await walk(path || '');
+  const sizeKey = `${state.owner}:${state.repo}:${state.branch}:size:${path || ''}`;
+  await idbPut(sizeKey, { size: total, computedAt: Date.now() });
+  return total;
+}
 
-  function applyFilterAndRender(items) {
-    const q = $("search").value.trim();
-    const filtered = q ? items.filter(x => fuzzyContains(x.name, q)) : items;
-    renderList(filtered, context);
+/* --------- Navigation & render pipeline --------- */
+async function navigate(path){
+  state.path = (path || '').replace(/^\/+|\/+$/g,'');
+  $('breadcrumbs').textContent = '/' + (state.path || '');
+  setApiLink(state.path);
+  $('upBtn').disabled = !state.path;
+  $('rootBtn').disabled = !state.path;
+  try{
+    const res = await fetchDirWithCache(state.path);
+    const items = res.items;
+    // store latestSha to meta if returned
+    if(res.latestSha){
+      const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
+      await idbPut(`${repoKey}:meta`, { latestSha: res.latestSha, checkedAt: Date.now() });
+    }
+    renderCurrent(items);
+  }catch(err){
+    $('rows').innerHTML = `<div class="row"><div style="grid-column:1/-1;color:#912a3a;padding:12px">Error: ${err.message}</div></div>`;
+  }
+}
+function renderCurrent(items){
+  // filter
+  const q = ($('q').value || '').trim().toLowerCase();
+  const filtered = (items || []).filter(it => {
+    if(!q) return true;
+    if(q.startsWith('ext:')) return extOf(it.name) === q.slice(4);
+    return it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q);
+  });
+  // sort
+  const sorter = $('sort').value;
+  filtered.sort((a,b) => {
+    if(sorter==='name') return a.name.localeCompare(b.name, undefined, {numeric:true});
+    if(sorter==='type'){ if(a.type === b.type) return a.name.localeCompare(b.name); return a.type==='dir' ? -1 : 1; }
+    if(sorter==='size') return (b.size||0) - (a.size||0);
+    return 0;
+  });
+  renderRows(filtered);
+}
+
+/* --------- Initialization --------- */
+(async function init(){
+  // infer owner/repo/branch
+  let owner = qs.get('owner') || ownerFromApp;
+  let repo = qs.get('repo') || repoFromApp;
+  let branch = qs.get('branch') || branchFromApp;
+  const host = location.hostname;
+  const path = location.pathname.replace(/^\/+|\/+$/g,'');
+  if(!owner || !repo){
+    if(host.endsWith('github.io')){
+      owner = owner || host.split('.')[0];
+      const segs = path.split('/').filter(Boolean);
+      repo = repo || (segs[0] || `${owner}.github.io`);
+    }
+  }
+  if(!owner || !repo){
+    $('rows').innerHTML = `<div class="row"><div style="grid-column:1/-1;color:var(--muted);padding:12px">Add ?owner=YOU&repo=REPO to URL</div></div>`;
+    return;
+  }
+  state.owner = owner; state.repo = repo; state.branch = branch || '';
+  setHeader(state.owner,state.repo,state.branch || 'detecting...');
+  $('limitNote').textContent = 'Unauthenticated ~60 req/hr';
+
+  // detect branch: try pref, then main/master, then repo.default_branch
+  async function detectBranch(pref){
+    const candidates = []; if(pref) candidates.push(pref); candidates.push('main','master');
+    for(const br of candidates){
+      try{
+        const r = await fetch(apiContentsUrl(state.owner,state.repo,'',br), { headers:{ 'Accept':'application/vnd.github.v3+json' }});
+        if(r.ok) return br;
+      }catch(e){}
+    }
+    try{
+      const r = await fetch(`https://api.github.com/repos/${state.owner}/${state.repo}`, { headers:{ 'Accept':'application/vnd.github.v3+json' }});
+      if(r.ok){
+        const j = await r.json();
+        return j.default_branch || '';
+      }
+    }catch(e){}
+    return '';
   }
 
-  (async function init() {
-    const { owner, repo, branch: pref } = inferRepo();
-    if (!owner || !repo) {
-      $("list").innerHTML = `<div class="empty">Unable to infer owner/repo. Add <code class="inline">?owner=YOUR_USER&amp;repo=YOUR_REPO</code> (and optional <code class="inline">&amp;branch=main</code>) to the URL.</div>`;
-      return;
-    }
-    const branch = await pickBranch(owner, repo, pref);
-    if (!branch) { $("list").innerHTML = `<div class="empty">Could not determine branch. Add <code class="inline">?branch=main</code> to the URL.</div>`; return; }
+  try{
+    const br = await detectBranch(state.branch);
+    if(!br){ $('rows').innerHTML = `<div class="row"><div style="grid-column:1/-1;color:var(--muted);padding:12px">Could not detect branch; add ?branch=main</div></div>`; return; }
+    state.branch = br;
+    setHeader(state.owner,state.repo,state.branch);
+    await navigate('');
+  }catch(e){
+    $('rows').innerHTML = `<div class="row"><div style="grid-column:1/-1;color:#912a3a;padding:12px">Init error: ${e.message}</div></div>`;
+  }
 
-    context = { owner, repo, branch, path: "" };
-    $("repo-pill").textContent = `${owner}/${repo}`;
-    $("branch-pill").textContent = `@ ${branch}`;
-    $("limitNote").textContent = "Unauthenticated API ~60 req/hr per IP";
-    $("search").addEventListener("input", () => applyFilterAndRender(cache.get(`${context.branch}:${context.path}`) || []));
-    $("upBtn").addEventListener("click", () => { const parts = context.path.split("/").filter(Boolean); parts.pop(); navigate(parts.join("/")); });
-    $("rootBtn").addEventListener("click", () => navigate(""));
-    window.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("search").value = ""; applyFilterAndRender(cache.get(`${context.branch}:${context.path}`) || []); } });
-    navigate("");
-  })();
+  // wire controls
+  $('q').addEventListener('input', () => {
+    // re-render from cached contents for this path
+    const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
+    const dirKey = `${repoKey}:dir:${state.path || ''}`;
+    idbGet(dirKey).then(cached => renderCurrent(cached ? cached.items : []));
+  });
+  $('sort').addEventListener('change', () => {
+    const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
+    const dirKey = `${repoKey}:dir:${state.path || ''}`;
+    idbGet(dirKey).then(cached => renderCurrent(cached ? cached.items : []));
+  });
+  $('refreshBtn').addEventListener('click', async ()=> {
+    // clear cached dir for current path so next navigate fetches fresh
+    const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
+    const dirKey = `${repoKey}:dir:${state.path || ''}`;
+    await idbDel(dirKey);
+    await idbDel(`${repoKey}:meta`);
+    await navigate(state.path);
+  });
+  $('upBtn').addEventListener('click', ()=> {
+    if(!state.path) return;
+    const parts = state.path.split('/').filter(Boolean); parts.pop();
+    navigate(parts.join('/'));
+  });
+  $('rootBtn').addEventListener('click', ()=> navigate(''));
+  $('computeBtn').addEventListener('click', async ()=>{
+    try{
+      $('computeBtn').disabled = true; $('computeBtn').textContent = 'Computing…';
+      const size = await computeFolderSize(state.path || '');
+      alert('Folder size: ' + fmtBytes(size));
+      // re-render to show potential size badges (if you want to display them)
+      const repoKey = `${state.owner}:${state.repo}:${state.branch}`;
+      const dirKey = `${repoKey}:dir:${state.path || ''}`;
+      const cached = await idbGet(dirKey);
+      renderCurrent(cached ? cached.items : []);
+    }catch(e){}
+    finally { $('computeBtn').disabled = false; $('computeBtn').textContent = 'Compute sizes'; }
+  });
+
+  // keyboard shortcuts
+  window.addEventListener('keydown', (e) => {
+    if(e.key === 'f' && document.activeElement.tagName !== 'INPUT'){ e.preventDefault(); $('q').focus(); }
+    if(e.key === 'Escape'){ $('q').value=''; const repoKey = `${state.owner}:${state.repo}:${state.branch}`; const dirKey = `${repoKey}:dir:${state.path || ''}`; idbGet(dirKey).then(c=> renderCurrent(c ? c.items : [])); }
+  });
+
 })();
 </script>
 </body>
