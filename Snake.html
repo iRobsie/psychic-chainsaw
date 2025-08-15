@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Procedural Snake 2 — Tail Eating Boogaloo</title>
+<style>
+  html,body{height:100%;margin:0;background:#0b0b0d;color:#ddd;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  #game{display:block;background:#07070a;margin:0 auto;box-shadow:0 8px 40px rgba(0,0,0,.9);}
+  .ui{position:fixed;left:12px;top:12px;color:#bfc3ff;font-size:13px;line-height:1.3}
+  .hint{opacity:.85;margin-top:8px;color:#9fb3ff}
+  .footer{position:fixed;right:12px;top:12px;color:#9aa;background:#071; padding:4px 8px;border-radius:6px;font-size:12px}
+  button{background:#1a1a26;border:1px solid #2b2b3a;padding:6px 8px;color:#bcd;border-radius:6px}
+</style>
+</head>
+<body>
+<canvas id="game" width="1000" height="700"></canvas>
+<div class="ui">
+  <div><strong>Snake</strong></div>
+  <div class="hint">WASD to move..</div>
+  <div class="hint">Patch Notes: NPCs will rarely kill themselves now.</div>
+  <div class="hint">Player still dies on self-collision and restarts.</div>
+  <div style="margin-top:8px">Length: <span id="len">0</span>  •  Score: <span id="score">0</span></div>
+  <div style="margin-top:8px"><button id="restart">Restart</button></div>
+</div>
+<script>
+/* Update summary:
+   - NPCs now avoid self-killing most of the time.
+   - When an NPC's head would move into its own body, we now:
+       * immediately kill the player (unchanged) if the player does the move.
+       * for NPCs: allow stepping into vacating tail when not growing (safe), otherwise only kill on a rare chance (SELF_KILL_CHANCE).
+       * if we avoid killing, we nudge the NPC to choose a different direction to reduce repeated self-hits.
+   - This is a minimal, low-cost change that keeps overall collision rules intact while reducing NPC self-deaths.
+*/
+
+function mulberry32(a){return function(){a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a>>>15, 1 | a); t = t + Math.imul(t ^ t>>>7, 61 | t) ^ t; return ((t ^ t>>>14) >>> 0) / 4294967296;};}
+function randRange(rng,a,b){return a + Math.floor(rng()*(b-a+1));}
+function pick(rng,arr){return arr[Math.floor(rng()*arr.length)];}
+function hsvToRgb(h,s,v){let f=(n)=>{let k=(n+h/60)%6; return v - v*s*Math.max(Math.min(k,4-k,1),0);}; return [Math.round(f(5)*255),Math.round(f(3)*255),Math.round(f(1)*255)];}
+
+const TILE=28;
+const BASE_VIEW_X=40, BASE_VIEW_Y=26;
+const VIEW_MULT=6;
+const VIEW_TILES_X = BASE_VIEW_X * VIEW_MULT;
+const VIEW_TILES_Y = BASE_VIEW_Y * VIEW_MULT;
+const TICK_MS=90;
+const SEED=Math.floor(Math.random()*1e9);
+const rng = mulberry32(SEED);
+const MAX_NPC = 250; // left as-is from your last save; change if you want
+
+// How often NPCs will actually allow a self-killing move to stand
+// Set low so NPCs almost never suicide (adjustable)
+const NPC_SELF_KILL_CHANCE = 0.08;
+
+// NPC AI tuning
+const NPC_NEAR_RADIUS = 8; // tiles: within this, NPCs are much more active
+const NPC_FAR_THINK = 12;   // ticks between AI updates when very far
+const NPC_BASE_THINK = 4;   // base ticks
+
+const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d',{alpha:false}); let W=canvas.width, H=canvas.height;
+window.addEventListener('resize',()=>{const r=0.95*Math.min(window.innerWidth,1400); canvas.width=r; canvas.height=r*0.7; W=canvas.width; H=canvas.height;});
+
+let player=null; let snakes=[]; let glowBalls=[]; let foods=[]; let lastTick=0; let score=0; let pendingRestart=false;
+
+document.getElementById('restart').addEventListener('click', ()=>{ afterReset(); });
+
+function afterReset(){ foods = []; glowBalls = []; snakes = []; lastTick = 0; score = 0; pendingRestart = false; document.getElementById('score').textContent = score; player = makeSnake('player', 0, 0, 6, true); snakes.push(player); for(let i=0;i<MAX_NPC;i++){ spawnOffscreenNPC(); } for(let i=0;i<180;i++){ foods.push({x:randRange(rng,-BASE_VIEW_X,BASE_VIEW_X), y:randRange(rng,-BASE_VIEW_Y,BASE_VIEW_Y), id:Math.random().toString(36).slice(2)}); } }
+
+afterReset();
+
+function makeSnake(id,x,y,len,isPlayer){ const colHue = Math.floor(rng()*360); const segs = []; for(let i=0;i<len;i++) segs.push({x:x-i,y:y}); return {id, segments:segs, dir:[1,0], nextDir:[1,0], alive:true, grow:0, colorHue:colHue, isPlayer, ai:{target:null,think:0}}; }
+
+const keyMap = {w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]}; window.addEventListener('keydown',(e)=>{ if(e.key && e.key.toLowerCase() in keyMap){ const d = keyMap[e.key.toLowerCase()]; if(player && !(d[0] === -player.dir[0] && d[1] === -player.dir[1])) player.nextDir = d; }});
+
+function euclid(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.sqrt(dx*dx+dy*dy); }
+
+function buildOccupancy(){ const occ = new Set(); for(const s of snakes){ if(!s.alive) continue; for(let i=0;i<s.segments.length;i++){ const p = s.segments[i]; occ.add(p.x+','+p.y); } } return occ; }
+
+function spawnOffscreenNPC(){ if(!player) return; const currentNPC = snakes.filter(s=>!s.isPlayer).length; if(currentNPC >= MAX_NPC) return; const screenRadius = Math.max(VIEW_TILES_X, VIEW_TILES_Y) / 2; const spawnRange = screenRadius * 2 + 40; let attempts = 0; let x=0, y=0; do{ x = player.segments[0].x + randRange(rng, -spawnRange, spawnRange); y = player.segments[0].y + randRange(rng, -spawnRange, spawnRange); attempts++; } while((Math.abs(x - player.segments[0].x) <= screenRadius && Math.abs(y - player.segments[0].y) <= screenRadius) && attempts < 300); const base = Math.max(3, (player ? player.segments.length : 5)); const len = Math.max(3, base + randRange(rng, -3, 3)); const id = 'cpu'+Math.floor(Math.random()*1e9); snakes.push(makeSnake(id, x, y, len, false)); }
+
+function aiThink(s){ if(!s || !s.alive) return; const head = s.segments[0]; const distToPlayer = euclid(head, player.segments[0]); let thinkInterval = NPC_BASE_THINK + Math.floor(Math.random()*3); if(distToPlayer > Math.max(VIEW_TILES_X, VIEW_TILES_Y)) thinkInterval = NPC_FAR_THINK + Math.floor(Math.random()*8); if(distToPlayer < NPC_NEAR_RADIUS) thinkInterval = 1 + Math.floor(Math.random()*2); s.ai.think--; if(s.ai.think > 0) return; s.ai.think = thinkInterval; let candidate = null; let bestD = Infinity; for(const f of foods){ const d = Math.abs(f.x-head.x) + Math.abs(f.y-head.y); if(d < bestD){ bestD = d; candidate = f; if(d <= 6) break; } } for(const g of glowBalls){ const d = Math.abs(g.x-head.x) + Math.abs(g.y-head.y); if(d < bestD){ bestD = d; candidate = g; if(d <= 6) break; } } if(distToPlayer < 6 && player.segments.length > s.segments.length && rng() < 0.55){ const dx = head.x - player.segments[0].x + randRange(rng,-1,1); const dy = head.y - player.segments[0].y + randRange(rng,-1,1); if(Math.abs(dx) > Math.abs(dy)) s.nextDir = [Math.sign(dx)||1,0]; else s.nextDir = [0, Math.sign(dy)||1]; return; } if(!candidate){ const dx = player.segments[0].x - head.x + randRange(rng,-4,4); const dy = player.segments[0].y - head.y + randRange(rng,-4,4); if(Math.abs(dx) > Math.abs(dy)) s.nextDir = [Math.sign(dx)||1,0]; else s.nextDir = [0, Math.sign(dy)||1]; if(rng() < 0.06) s.nextDir = pick(rng, [[1,0],[-1,0],[0,1],[0,-1]]); return; } let dx = candidate.x - head.x, dy = candidate.y - head.y; let prefer; if(Math.abs(dx) > Math.abs(dy)) prefer = [Math.sign(dx)||1,0]; else prefer = [0, Math.sign(dy)||1]; const occ = buildOccupancy(); const tryDirs = [prefer, [1,0],[-1,0],[0,1],[0,-1]]; for(const dir of tryDirs){ const nx = head.x + dir[0], ny = head.y + dir[1]; if(!occ.has(nx+','+ny) || (nx===s.segments[s.segments.length-1].x && ny===s.segments[s.segments.length-1].y)){ s.nextDir = dir; break; } } if(rng() < 0.05) s.nextDir = pick(rng, [[1,0],[-1,0],[0,1],[0,-1]]); }
+
+function moveAll(){ for(const s of snakes){ if(!s.alive) continue; if(!s.isPlayer) aiThink(s); }
+  const headTargets = new Map(); for(const s of snakes){ if(!s.alive) continue; const dir = s.nextDir || s.dir; s.dir = dir; const head = s.segments[0]; headTargets.set(s.id, {x: head.x + dir[0], y: head.y + dir[1]}); }
+  const targetGroups = new Map(); for(const [id,pos] of headTargets.entries()){ const k = pos.x+','+pos.y; if(!targetGroups.has(k)) targetGroups.set(k,[]); targetGroups.get(k).push(id); }
+  const eatenThisTick = new Set(); for(const [k,arr] of targetGroups.entries()){ if(arr.length>1){ const involved = arr.map(id=>snakes.find(s=>s.id===id)).filter(Boolean).filter(s=>s.alive); if(involved.length<=1) continue; involved.sort((a,b)=>b.segments.length - a.segments.length); const winner = involved[0]; const losers = involved.slice(1); for(const loser of losers){ loser.alive = false; eatenThisTick.add(loser.id); winner.grow += loser.segments.length; } } }
+
+  const proposedOccupancy = new Map(); const proposedSegmentsBySnake = new Map(); for(const s of snakes){ if(!s.alive) continue; if(eatenThisTick.has(s.id)) continue; const target = headTargets.get(s.id); if(!target) continue; const willGrow = s.grow > 0; const newSegs = []; newSegs.push({x: target.x, y: target.y}); const keep = Math.max(0, s.segments.length - (willGrow ? 0 : 1)); for(let i=0;i<keep;i++){ newSegs.push({x: s.segments[i].x, y: s.segments[i].y}); } proposedSegmentsBySnake.set(s.id, newSegs); for(let i=0;i<newSegs.length;i++){ const p = newSegs[i]; const key = p.x+','+p.y; if(!proposedOccupancy.has(key)) proposedOccupancy.set(key, []); proposedOccupancy.get(key).push({snakeId: s.id, index: i}); } }
+
+  // detect collisions (head onto other's occupancy) AND self-collisions with NPC mitigation
+  const toKill = new Set(); let playerDied = false; for(const s of snakes){ if(!s.alive) continue; if(eatenThisTick.has(s.id)) continue; const target = headTargets.get(s.id); const key = target.x+','+target.y; const occupants = proposedOccupancy.get(key) || []; for(const occ of occupants){ if(occ.snakeId !== s.id){ toKill.add(s.id); break; }
+      // self-collision: occ.index > 0 means head would land on own body
+      if(occ.snakeId === s.id && occ.index > 0){
+        // player: strict rule -> die
+        if(s.isPlayer){ toKill.add(s.id); playerDied = true; break; }
+        // NPC: allow tail-step when not growing, otherwise only kill on rare chance
+        const newSegs = proposedSegmentsBySnake.get(s.id);
+        const isSteppingIntoTail = (occ.index === newSegs.length - 1);
+        if(isSteppingIntoTail && s.grow === 0){
+          // safe: tail will vacate this tick — let NPC proceed
+          continue;
+        }
+        // otherwise only rarely let NPCs actually die from self-hits
+        if(rng() < NPC_SELF_KILL_CHANCE){ toKill.add(s.id); break; }
+        // avoid killing: nudge the NPC to pick a different direction next tick to reduce repeat suicide
+        s.nextDir = pick(rng, [[1,0],[-1,0],[0,1],[0,-1]]);
+        break;
+      } }
+  }
+
+  // apply deaths (drop glows). If player died, schedule restart
+  for(const id of toKill){ const s = snakes.find(x=>x.id===id); if(s && s.alive){ s.alive = false; for(const seg of s.segments){ glowBalls.push({x: seg.x, y: seg.y, life: 220 + Math.floor(rng()*120), hue: Math.floor(rng()*360)}); } } }
+  if(playerDied && !pendingRestart){ pendingRestart = true; setTimeout(()=>{ afterReset(); }, 350); }
+
+  // finalize moves
+  for(const s of snakes){ if(!s.alive) continue; if(eatenThisTick.has(s.id)) continue; const newSegs = proposedSegmentsBySnake.get(s.id); if(!newSegs) continue; s.segments = newSegs; if(s.grow > 0) s.grow--; }
+
+  // eating foods and glowBalls
+  for(const s of snakes){ if(!s.alive) continue; const head = s.segments[0]; for(let i=foods.length-1;i>=0;i--){ const f = foods[i]; if(f.x === head.x && f.y === head.y){ s.grow += 1; foods.splice(i,1); if(s.isPlayer) score += 1; document.getElementById('score').textContent = score; } } for(let i=glowBalls.length-1;i>=0;i--){ const g = glowBalls[i]; if(g.x === head.x && g.y === head.y){ s.grow += 1; glowBalls.splice(i,1); if(s.isPlayer) score += 1; document.getElementById('score').textContent = score; } } }
+
+  // remove eaten snakes from list
+  snakes = snakes.filter(s => s.alive || eatenThisTick.has(s.id) === false);
+
+  // spawn occasional NPCs if under cap
+  if(rng() < 0.05){ const currentNPC = snakes.filter(s=>!s.isPlayer).length; if(currentNPC < MAX_NPC) spawnOffscreenNPC(); }
+}
+
+function draw(){ ctx.fillStyle = '#07070a'; ctx.fillRect(0,0,W,H); const cam = {x:player.segments[0].x, y:player.segments[0].y}; const minX = Math.floor(cam.x - VIEW_TILES_X/2), maxX = Math.floor(cam.x + VIEW_TILES_X/2); const minY = Math.floor(cam.y - VIEW_TILES_Y/2), maxY = Math.floor(cam.y + VIEW_TILES_Y/2);
+  // draw floor
+  for(let tx = minX; tx<=maxX; tx++) for(let ty=minY; ty<=maxY; ty++){ const s = worldToScreen(tx,ty,cam); const cseed = Math.abs((tx*73856093) ^ (ty*19349663)) % 360; const base = 18 + (cseed%15); ctx.fillStyle = `hsl(${cseed%40} 20% ${base}%)`; ctx.fillRect(s.x, s.y, TILE+1, TILE+1); }
+  // foods
+  for(const f of foods){ if(f.x < minX || f.x > maxX || f.y < minY || f.y > maxY) continue; const sPos = worldToScreen(f.x,f.y,cam); const g = ctx.createRadialGradient(sPos.x+TILE/2, sPos.y+TILE/2, 2, sPos.x+TILE/2, sPos.y+TILE/2, TILE); const hue = ((f.x*7 + f.y*11) % 360 + (Date.now()/40)%360) % 360; const rgb = hsvToRgb(hue,1,1); g.addColorStop(0, `rgba(${rgb.join(',')},1)`); g.addColorStop(0.6, `rgba(${rgb.join(',')},0.45)`); g.addColorStop(1, `rgba(0,0,0,0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sPos.x+TILE/2, sPos.y+TILE/2, TILE*0.45,0,Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(sPos.x+TILE/2 - 4, sPos.y+TILE/2 - 6, TILE*0.12,0,Math.PI*2); ctx.fill(); }
+  // glows
+  for(let i = glowBalls.length-1; i >= 0; i--){ const gB = glowBalls[i]; gB.life--; if(gB.life <= 0){ glowBalls.splice(i,1); continue; } if(gB.x < minX || gB.x > maxX || gB.y < minY || gB.y > maxY) continue; const sPos = worldToScreen(gB.x,gB.y,cam); const g = ctx.createRadialGradient(sPos.x+TILE/2, sPos.y+TILE/2, 2, sPos.x+TILE/2, sPos.y+TILE/2, TILE*1.6); const rgb = hsvToRgb((gB.hue + (Date.now()/60)%360)%360,1,1); g.addColorStop(0, `rgba(${rgb.join(',')},0.95)`); g.addColorStop(0.3, `rgba(${rgb.join(',')},0.45)`); g.addColorStop(1, `rgba(0,0,0,0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sPos.x+TILE/2, sPos.y+TILE/2, TILE*0.7,0,Math.PI*2); ctx.fill(); }
+  // draw snakes
+  const drawList = snakes.slice().filter(s=>s.segments.length>0); drawList.sort((a,b)=>a.segments[0].y - b.segments[0].y); for(const s of drawList){ if(!s.alive) continue; for(let i=s.segments.length-1;i>=0;i--){ const seg = s.segments[i]; const spos = worldToScreen(seg.x,seg.y,cam); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(spos.x+TILE/2, spos.y+TILE*0.9, TILE*0.5, TILE*0.22, 0, 0, Math.PI*2); ctx.fill(); const hue = s.colorHue + i*2; const [r,gc,b] = hsvToRgb((hue+Date.now()/120)%360, 0.9, 0.85); ctx.fillStyle = `rgb(${r},${gc},${b})`; ctx.fillRect(spos.x+3, spos.y+2, TILE-6, TILE-6); ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(spos.x+4, spos.y+3, TILE-10, Math.max(3,TILE*0.18)); } const head = s.segments[0]; const hs = worldToScreen(head.x,head.y,cam); ctx.fillStyle = `hsl(${s.colorHue} 95% 50%)`; ctx.beginPath(); ctx.ellipse(hs.x+TILE/2, hs.y+TILE/2 - 4, TILE*0.28, TILE*0.42, 0, 0, Math.PI*2); ctx.fill(); }
+  document.getElementById('len').textContent = player.segments.length; }
+
+function worldToScreen(tx,ty,cam){ const cx = (tx - cam.x) * TILE + W/2; const cy = (ty - cam.y) * TILE + H/2; const skew = (ty - cam.y) * 0.06 * TILE; return {x:cx - skew, y:cy - (Math.abs(ty-cam.y))*0.08*TILE}; }
+
+function refillFoodNear(camx,camy){ const radius = Math.max(BASE_VIEW_X, BASE_VIEW_Y) * 2; let nearby = 0; for(const f of foods){ if(Math.abs(f.x-camx) <= radius && Math.abs(f.y-camy) <= radius) nearby++; } if(nearby < 110){ const add = 110 - nearby; for(let i=0;i<add;i++){ const fx = camx + randRange(rng,-radius,radius); const fy = camy + randRange(rng,-radius,radius); foods.push({x:fx,y:fy,id:Math.random().toString(36).slice(2)}); } }}
+
+function gameLoop(ts){ if(!lastTick) lastTick = ts; const elapsed = ts - lastTick; if(elapsed > TICK_MS){ moveAll(); refillFoodNear(player.segments[0].x, player.segments[0].y); lastTick = ts; } draw(); requestAnimationFrame(gameLoop); }
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
