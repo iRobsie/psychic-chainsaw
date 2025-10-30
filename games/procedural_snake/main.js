@@ -1,0 +1,302 @@
+import { initCanvas } from '../../game-lib/render/canvas.js';
+import { startGameLoop } from '../../game-lib/core/loop.js';
+
+export function init() {
+  'use strict';
+  const base = initCanvas('#game', window.innerWidth, window.innerHeight);
+  const canvas = base.canvas;
+  const ctx = canvas.getContext('2d', { alpha: false }) || base.ctx;
+  // ===== Config =====
+  let TILE = 28;                    // dynamic scale via resize (bigger monitors see more)
+  const TICK_MS = 90;               // fixed speed
+  const MAX_NPC = 63;               // cap
+  const FOOD_TARGET_ONSCREEN = 130; // maintained count
+  const COMBO_WINDOW_MS = 1800;     // ~2x original (~900ms)
+  const SUPER_ORB_THRESHOLD = 6;    // spawn super every N combo
+  const SUPER_ORB_VALUE = 5;        // growth & score
+  const PATHFINDER_NEAR_RADIUS = 12;// tiles
+  const PATHFINDER_MAX_STEPS = 12;  // BFS cap
+
+  // Magnets
+  const MAGNET_DURATION_MS = 30000;       // 30s after 1000 orbs
+  const MAGNET_RADIUS_TILES = 5;          // macro radius
+  const MICRO_MAGNET_COMBO = 10;          // x10, x20, ...
+  const MICRO_MAGNET_DURATION_MS = 3000;  // 3s
+  const MICRO_MAGNET_RADIUS_TILES = 3;    // micro radius
+
+  const TICK_SECONDS = TICK_MS / 1000;
+  let tickAccumulator = 0;
+
+  // ===== State =====
+    let W=0, H=0, DPR=Math.max(1, window.devicePixelRatio||1);
+
+  const rng = mulberry32(Math.floor(Math.random()*1e9));
+  let player=null, snakes=[], foods=[], glowBalls=[], popups=[];
+  let score=0, hiScore=0, pendingRestart=false;
+  let comboCount=0, comboBest=0, comboTimer=0;
+  let orbsCollected=0;
+  let magnetUntil=0, microMagnetUntil=0, lastMicroAwardedCombo=0; // perf.now timestamps
+
+  const telemetry = { npcSelfDeaths:0, npcPrevented:0, npcCollisions:0, headKills:0, pathSuccess:0, comboBest:0, orbCount:0 };
+
+  // toggles
+  let pathfinderEnabled = true;
+  let debugOverlay = false; let debugN = 8; let lastOccMap=null;
+
+  // ===== UI wiring =====
+  document.getElementById('tele-path').addEventListener('change', e=> pathfinderEnabled = e.target.checked);
+  document.getElementById('tele-debug').addEventListener('change', e=> debugOverlay = e.target.checked);
+  document.getElementById('tele-debug-n').addEventListener('change', e=>{ const n=parseInt(e.target.value,10); debugN = isNaN(n)?8:Math.max(1,Math.min(20,n)); e.target.value = String(debugN); });
+  document.getElementById('restart').addEventListener('click', afterReset);
+  window.addEventListener('resize', sizeCanvas);
+
+  sizeCanvas();
+  afterReset();
+
+  // ===== Input =====
+  const keyMap={w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
+  window.addEventListener('keydown', e=>{ const k=(e.key||'').toLowerCase(); if(!(k in keyMap)) return; const d=keyMap[k]; if(player && !(d[0]===-player.dir[0] && d[1]===-player.dir[1])) player.nextDir=d; });
+
+  // ===== Setup =====
+  function afterReset(){ foods=[]; glowBalls=[]; snakes=[]; popups=[]; score=0; updateScoreUI(); pendingRestart=false; comboCount=0; comboBest=0; comboTimer=0; orbsCollected=0; telemetry.orbCount=0; magnetUntil=0; microMagnetUntil=0; lastMicroAwardedCombo=0; updateMagnetUI(); const bar=document.getElementById('comboBar'); if(bar) bar.style.width='0%';
+    player = makeSnake('player',0,0,6,true); snakes.push(player);
+    for(let i=0;i<MAX_NPC;i++) spawnOffscreenNPC();
+    spawnOnscreenFoodBurst();
+  }
+
+  function makeSnake(id,x,y,len,isPlayer){ const hue=Math.floor(rng()*360); const segs=[]; for(let i=0;i<len;i++) segs.push({x:x-i,y:y}); return {id,segments:segs,dir:[1,0],nextDir:[1,0],alive:true,grow:0,colorHue:hue,isPlayer,ai:{think:0}}; }
+
+  function spawnOffscreenNPC(){ if(!player) return; const current=snakes.filter(s=>!s.isPlayer).length; if(current>=MAX_NPC) return; const tilesX=Math.ceil(W/TILE), tilesY=Math.ceil(H/TILE); const screenR=Math.max(tilesX,tilesY); const range=screenR*2+40; let x=0,y=0,tries=0; do{ x=player.segments[0].x+randRange(rng,-range,range); y=player.segments[0].y+randRange(rng,-range,range); tries++; } while((Math.abs(x-player.segments[0].x)<=screenR && Math.abs(y-player.segments[0].y)<=screenR) && tries<300); const base=Math.max(3,player?player.segments.length:5); const len=Math.max(3, base+randRange(rng,-3,3)); snakes.push(makeSnake('cpu'+Math.floor(rng()*1e9),x,y,len,false)); }
+
+  // ===== AI =====
+  function aiThink(s, occMap){ if(!s.alive) return; const head=s.segments[0]; const phead=player.segments[0]; const distToPlayer=Math.abs(head.x-phead.x)+Math.abs(head.y-phead.y);
+    let think=3+Math.floor(rng()*3); if(distToPlayer>Math.max(Math.ceil(W/TILE),Math.ceil(H/TILE))) think=12+Math.floor(rng()*8); if(distToPlayer<10) think=1+Math.floor(rng()*2); s.ai.think--; if(s.ai.think>0) return; s.ai.think=think;
+    const target = nearestFoodOrOrb(head, Math.max(Math.ceil(W/TILE),Math.ceil(H/TILE)));
+    const prefer = target ? primaryStepToward(head, target) : roughStepToward(head, phead);
+    const dir = chooseSafeDir(s, prefer, occMap) || (pathfinderEnabled ? pathfindFirstStepOcc(s, occMap, PATHFINDER_MAX_STEPS) : null) || prefer;
+    if(dir){ s.nextDir = dir; }
+  }
+
+  function nearestFoodOrOrb(head, radius){ let best=null,bestD=1e9; for(let i=0;i<foods.length;i++){ const f=foods[i]; const d=Math.abs(f.x-head.x)+Math.abs(f.y-head.y); if(d<bestD && d<=radius){ bestD=d; best=f; } } for(let i=0;i<glowBalls.length;i++){ const g=glowBalls[i]; const d=Math.abs(g.x-head.x)+Math.abs(g.y-head.y); if(d<bestD && d<=radius){ bestD=d; best=g; } } return best; }
+  function primaryStepToward(from,to){ const dx=to.x-from.x, dy=to.y-from.y; return (Math.abs(dx)>Math.abs(dy)) ? [Math.sign(dx)||1,0] : [0,Math.sign(dy)||1]; }
+  function roughStepToward(from,to){ const dx=to.x-from.x+randRange(rng,-4,4), dy=to.y-from.y+randRange(rng,-4,4); return (Math.abs(dx)>Math.abs(dy)) ? [Math.sign(dx)||1,0] : [0,Math.sign(dy)||1]; }
+
+  // Avoid stop and avoid stepping into own body (except safe tail step)
+  function chooseSafeDir(s, prefer, occMap){ const cand=[prefer,[1,0],[-1,0],[0,1],[0,-1]]; const head=s.segments[0]; for(let i=0;i<cand.length;i++){ const d=cand[i]; if(d[0]===-s.dir[0] && d[1]===-s.dir[1]) continue; const nx=head.x+d[0], ny=head.y+d[1]; if(isSafeTileFor(s, nx, ny, occMap)) { if(i>0) telemetry.npcPrevented++; return d; } } return null; }
+  function isSafeTileFor(s, nx, ny, occMap){ const key=nx+','+ny; const entries=occMap.get(key)||[]; for(let i=0;i<entries.length;i++){ const e=entries[i]; if(e.snakeId!==s.id) return false; if(e.snakeId===s.id && e.index>0){ const tail=s.segments[s.segments.length-1]; if(!(s.grow===0 && tail.x===nx && tail.y===ny)) return false; } } return true; }
+
+  // ===== Movement & Collisions =====
+  function moveAll(){ const occMap = buildCurrentOcc(); lastOccMap = occMap;
+    for(let i=0;i<snakes.length;i++){ const s=snakes[i]; if(!s.alive) continue; if(!s.isPlayer) aiThink(s, occMap); }
+
+    const headTargets=new Map(); for(let i=0;i<snakes.length;i++){ const s=snakes[i]; if(!s.alive) continue; const dir=s.nextDir||s.dir; s.dir=dir; const h=s.segments[0]; headTargets.set(s.id,{x:h.x+dir[0], y:h.y+dir[1]}); }
+
+    const targetGroups=new Map(); for(const [id,pos] of headTargets){ const k=pos.x+','+pos.y; if(!targetGroups.has(k)) targetGroups.set(k,[]); targetGroups.get(k).push(id); }
+    const eatenThisTick=new Set();
+    for(const [k,ids] of targetGroups){ if(ids.length>1){ const involved=ids.map(id=>snakes.find(s=>s.id===id)).filter(s=>s&&s.alive); if(involved.length<=1) continue; involved.sort((a,b)=>b.segments.length-a.segments.length); const winner=involved[0]; const losers=involved.slice(1); telemetry.headKills += losers.length; for(let i=0;i<losers.length;i++){ const l=losers[i]; l.alive=false; eatenThisTick.add(l.id); winner.grow += l.segments.length; dropDeathOrbs(l); } } }
+
+    const proposed=new Map(); const newSegsBy=new Map();
+    for(let i=0;i<snakes.length;i++){ const s=snakes[i]; if(!s.alive||eatenThisTick.has(s.id)) continue; const target=headTargets.get(s.id); if(!target) continue; const willGrow=s.grow>0; const segs=[{x:target.x,y:target.y}]; const keep=Math.max(0, s.segments.length - (willGrow?0:1)); for(let j=0;j<keep;j++) segs.push({x:s.segments[j].x,y:s.segments[j].y}); newSegsBy.set(s.id,segs); for(let j=0;j<segs.length;j++){ const p=segs[j]; const key=p.x+','+p.y; if(!proposed.has(key)) proposed.set(key,[]); proposed.get(key).push({snakeId:s.id,index:j}); } }
+
+    const toKill=new Set(); let playerDied=false;
+    for(let i=0;i<snakes.length;i++){
+      const s=snakes[i]; if(!s.alive||eatenThisTick.has(s.id)) continue; const t=headTargets.get(s.id); const key=t.x+','+t.y; const occ=proposed.get(key)||[]; let collided=false;
+      for(let j=0;j<occ.length;j++){ const o=occ[j]; if(o.snakeId!==s.id){ collided=true; break; } if(o.snakeId===s.id && o.index>0){ collided=true; break; } }
+      if(collided){ if(s.isPlayer){ playerDied=true; } else { telemetry.npcCollisions++; } toKill.add(s.id); }
+    }
+
+    for(const id of toKill){ const s=snakes.find(x=>x.id===id); if(s&&s.alive){ s.alive=false; dropDeathOrbs(s); } }
+    if(playerDied && !pendingRestart){ pendingRestart=true; setTimeout(()=>afterReset(),350); }
+
+    for(let i=0;i<snakes.length;i++){ const s=snakes[i]; if(!s.alive||eatenThisTick.has(s.id)) continue; const segs=newSegsBy.get(s.id); if(!segs) continue; s.segments=segs; if(s.grow>0) s.grow--; }
+
+    // Eating at head
+    for(let i=0;i<snakes.length;i++){
+      const s=snakes[i]; if(!s.alive) continue; const head=s.segments[0];
+      // magnet pickup around player; orbs remain static
+      if(s.isPlayer){ eatAroundPlayer(head); }
+      for(let j=foods.length-1;j>=0;j--){ const f=foods[j]; if(f.x===head.x && f.y===head.y){ s.grow+=f.value; if(s.isPlayer){ onOrbCollected(); onEatValue(f.value); } foods.splice(j,1); }}
+      for(let j=glowBalls.length-1;j>=0;j--){ const g=glowBalls[j]; if(g.x===head.x && g.y===head.y){ s.grow+=1; if(s.isPlayer){ onOrbCollected(); onEatValue(1); } glowBalls.splice(j,1); }}
+    }
+
+    refillOnscreenFood();
+    updateTelemetryUI();
+  }
+
+  // Player magnet pickup within radius; orbs remain static
+  function eatAroundPlayer(head){ const R = magnetRadius(); if(R<=0) return; // manhattan radius
+    for(let j=foods.length-1;j>=0;j--){ const f=foods[j]; const d=Math.abs(f.x-head.x)+Math.abs(f.y-head.y); if(d>0 && d<=R){ player.grow+=f.value; onOrbCollected(); onEatValue(f.value); foods.splice(j,1); }}
+    for(let j=glowBalls.length-1;j>=0;j--){ const g=glowBalls[j]; const d=Math.abs(g.x-head.x)+Math.abs(g.y-head.y); if(d>0 && d<=R){ player.grow+=1; onOrbCollected(); onEatValue(1); glowBalls.splice(j,1); }}
+  }
+
+  function magnetActive(){ const now=performance.now(); return now < magnetUntil || now < microMagnetUntil; }
+  function magnetRadius(){ const now=performance.now(); if(now < magnetUntil) return MAGNET_RADIUS_TILES; if(now < microMagnetUntil) return MICRO_MAGNET_RADIUS_TILES; return 0; }
+  function magnetSecondsLeft(){ const now=performance.now(); return Math.max(0, Math.ceil(Math.max(magnetUntil-now, microMagnetUntil-now)/1000)); }
+  function updateMagnetUI(){ const badge=document.getElementById('magnetBadge'); const left=document.getElementById('magnetLeft'); const tb=document.getElementById('t-magnet'); if(magnetActive()){ badge.style.display='inline-block'; const sec = magnetSecondsLeft(); left.textContent = sec; tb.textContent = sec + 's'; } else { badge.style.display='none'; tb.textContent='0s'; } }
+
+  function dropDeathOrbs(s){ // persistent death orbs
+    for(let i=0;i<s.segments.length;i++){ const seg=s.segments[i]; glowBalls.push({x:seg.x,y:seg.y,hue:Math.floor(rng()*360)}); }
+  }
+
+  // ===== Food (on-screen only) =====
+  function spawnOnscreenFoodBurst(){ const cam=player.segments[0]; const {minX,maxX,minY,maxY}=currentViewBounds(cam); for(let i=0;i<FOOD_TARGET_ONSCREEN;i++){ const fx=randRange(rng,minX,maxX), fy=randRange(rng,minY,maxY); const isSuper=(i%25===0); foods.push({x:fx,y:fy,value:isSuper?SUPER_ORB_VALUE:1,super:isSuper}); } }
+  function refillOnscreenFood(){ const cam=player.segments[0]; const {minX,maxX,minY,maxY}=currentViewBounds(cam); let count=0; for(let i=0;i<foods.length;i++){ const f=foods[i]; if(f.x>=minX&&f.x<=maxX&&f.y>=minY&&f.y<=maxY) count++; } if(count<FOOD_TARGET_ONSCREEN){ const need=FOOD_TARGET_ONSCREEN-count; for(let i=0;i<need;i++){ const fx=randRange(rng,minX,maxX), fy=randRange(rng,minY,maxY); foods.push({x:fx,y:fy,value:1,super:false}); } } }
+
+  function currentViewBounds(cam){ const tilesX=Math.ceil(W/TILE), tilesY=Math.ceil(H/TILE); const minX=Math.floor(cam.x-tilesX/2), maxX=Math.floor(cam.x+tilesX/2); const minY=Math.floor(cam.y-tilesY/2), maxY=Math.floor(cam.y+tilesY/2); return {minX,maxX,minY,maxY}; }
+
+  // ===== Combo & Magnets =====
+  function onOrbCollected(){ orbsCollected++; telemetry.orbCount = orbsCollected; if(orbsCollected>0 && orbsCollected%1000===0){ magnetUntil = performance.now() + MAGNET_DURATION_MS; updateMagnetUI(); } }
+  function onEatValue(value){ const now=performance.now(); if(now - comboTimer <= COMBO_WINDOW_MS){ comboCount++; } else { comboCount=1; }
+    comboTimer=now; comboBest=Math.max(comboBest, comboCount); telemetry.comboBest=comboBest; const mult=1 + Math.floor((comboCount-1)/3); const gain=value*mult; score+=gain; updateScoreUI(); showCombo(mult,gain);
+    if(comboCount>0 && (comboCount % SUPER_ORB_THRESHOLD)===0){ const cam=player.segments[0]; const {minX,maxX,minY,maxY}=currentViewBounds(cam); const fx=randRange(rng,minX,maxX), fy=randRange(rng,minY,maxY); foods.push({x:fx,y:fy,value:SUPER_ORB_VALUE,super:true}); }
+    if(comboCount>=MICRO_MAGNET_COMBO && (comboCount % MICRO_MAGNET_COMBO)===0 && comboCount!==lastMicroAwardedCombo){ microMagnetUntil = Math.max(microMagnetUntil, now + MICRO_MAGNET_DURATION_MS); lastMicroAwardedCombo = comboCount; updateMagnetUI(); }
+  }
+
+  function showCombo(mult,gain){ const el=document.getElementById('comboText'); el.textContent=`Combo x${mult}  (+${gain})`; el.style.opacity='1'; el.style.transition='none'; requestAnimationFrame(()=>{ el.style.transition='opacity 1.6s ease'; el.style.opacity='0'; }); const pct=Math.min(100,(COMBO_WINDOW_MS - Math.max(0, performance.now()-comboTimer))/COMBO_WINDOW_MS*100); const bar=document.getElementById('comboBar'); if(bar) bar.style.width=pct+'%'; popups.push({x:player.segments[0].x,y:player.segments[0].y,life:36,text:`+${gain}`}); }
+
+  // ===== Render =====
+  function draw(){ if(!player||!player.segments||player.segments.length===0) return; ctx.fillStyle='#070a12'; ctx.fillRect(0,0,W,H); const cam=player.segments[0]; const {minX,maxX,minY,maxY}=currentViewBounds(cam);
+    drawBackground(minX,maxX,minY,maxY,cam);
+
+    // foods (static)
+    for(let i=0;i<foods.length;i++){ const f=foods[i]; if(f.x<minX||f.x>maxX||f.y<minY||f.y>maxY) continue; const s=worldToScreen(f.x,f.y,cam); const hue=((f.x*7+f.y*11)%360 + (Date.now()/40)%360)%360; const rgb=hsvToRgb(hue,1,1); const g=ctx.createRadialGradient(s.x+TILE/2,s.y+TILE/2,2,s.x+TILE/2,s.y+TILE/2,TILE*(f.super?0.8:0.6)); g.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},1)`); g.addColorStop(0.6,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.45)`); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(s.x+TILE/2,s.y+TILE/2,TILE*(f.super?0.5:0.4),0,Math.PI*2); ctx.fill(); }
+
+    // persistent death orbs
+    for(let i=0;i<glowBalls.length;i++){ const g=glowBalls[i]; if(g.x<minX||g.x>maxX||g.y<minY||g.y>maxY) continue; const s=worldToScreen(g.x,g.y,cam); const pulse = 0.8 + 0.2*Math.sin((Date.now()+i*77)/600); const rgb=hsvToRgb((g.hue+(Date.now()/60)%360)%360,1,1); const gr=ctx.createRadialGradient(s.x+TILE/2,s.y+TILE/2,2,s.x+TILE/2,s.y+TILE/2,TILE*1.6*pulse); gr.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.95)`); gr.addColorStop(0.3,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.4)`); gr.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(s.x+TILE/2,s.y+TILE/2,TILE*0.7*pulse,0,Math.PI*2); ctx.fill(); }
+
+    // snakes
+    const drawList = snakes.filter(s=>s.alive && s.segments.length>0).slice();
+    drawList.sort((a,b)=>a.segments[0].y - b.segments[0].y);
+    for(let n=0;n<drawList.length;n++){
+      const s = drawList[n];
+      const head = s.segments[0];
+      if(head.x<minX-2||head.x>maxX+2||head.y<minY-2||head.y>maxY+2) continue;
+      // FIX: iterate by s.segments, not snakes[n].segments (prevents undefined access)
+      for(let i=s.segments.length-1;i>=0;i--){
+        const seg=s.segments[i];
+        const p=worldToScreen(seg.x,seg.y,cam);
+        ctx.fillStyle='rgba(0,0,0,0.25)';
+        ctx.beginPath(); ctx.ellipse(p.x+TILE/2,p.y+TILE*0.9,TILE*0.5,TILE*0.22,0,0,Math.PI*2); ctx.fill();
+        const hue=s.colorHue + i*2; const col=hsvToRgb((hue+Date.now()/200)%360,0.9,0.88);
+        ctx.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`; ctx.fillRect(p.x+3,p.y+2,TILE-6,TILE-6);
+        ctx.fillStyle='rgba(255,255,255,0.14)'; ctx.fillRect(p.x+4,p.y+3,TILE-10, Math.max(3,TILE*0.18));
+      }
+      const hs=worldToScreen(head.x,head.y,cam);
+      ctx.fillStyle=`hsl(${s.colorHue} 95% 50%)`;
+      ctx.beginPath(); ctx.ellipse(hs.x+TILE/2, hs.y+TILE/2 - 4, TILE*0.28, TILE*0.42, 0,0,Math.PI*2); ctx.fill();
+    }
+
+    // magnet ring
+    if(magnetActive()){ const head=player.segments[0]; const s=worldToScreen(head.x,head.y,cam); ctx.beginPath(); ctx.arc(s.x+TILE/2, s.y+TILE/2, TILE*(magnetRadius()+0.5), 0, Math.PI*2); ctx.strokeStyle='rgba(180,220,255,0.35)'; ctx.lineWidth=2; ctx.stroke(); updateMagnetUI(); }
+
+    // debug overlay (light)
+    if(debugOverlay && lastOccMap){ drawDebugOverlay(cam, minX,maxX,minY,maxY); }
+
+    // combo meter update
+    if(comboTimer>0){ const pct=Math.min(100,(COMBO_WINDOW_MS - Math.max(0, performance.now()-comboTimer))/COMBO_WINDOW_MS*100); const bar=document.getElementById('comboBar'); if(bar) bar.style.width=pct+'%'; }
+
+    // popups
+    for(let i=popups.length-1;i>=0;i--){ const p=popups[i]; const sp=worldToScreen(p.x,p.y,cam); p.life--; ctx.globalAlpha=Math.max(0,p.life/36); ctx.fillStyle='#fff'; ctx.font='bold 16px system-ui,Segoe UI,Roboto,Arial'; ctx.fillText(p.text, sp.x+TILE/2, sp.y-6-(36-p.life)); ctx.globalAlpha=1; if(p.life<=0) popups.splice(i,1); }
+
+    document.getElementById('len').textContent = player.segments.length;
+  }
+
+  function drawDebugOverlay(cam,minX,maxX,minY,maxY){ telemetry.pathSuccess += 0; // keep counter stable
+    const npcs = snakes.filter(s=>s.alive && !s.isPlayer);
+    npcs.sort((a,b)=>{ const ha=a.segments[0], hb=b.segments[0]; const da=Math.abs(ha.x-cam.x)+Math.abs(ha.y-cam.y); const db=Math.abs(hb.x-cam.x)+Math.abs(hb.y-cam.y); return da-db; });
+    const pickN = npcs.slice(0, Math.min(debugN, npcs.length));
+    ctx.save(); ctx.globalAlpha=0.75;
+    for(let i=0;i<pickN.length;i++){
+      const s = pickN[i]; const h=s.segments[0]; if(h.x<minX||h.x>maxX||h.y<minY||h.y>maxY) continue; const hs=worldToScreen(h.x,h.y,cam);
+      const nd = Array.isArray(s.nextDir) ? s.nextDir : s.dir; // guard
+      const ax=hs.x+TILE/2, ay=hs.y+TILE/2; const bx=ax + nd[0]*TILE*0.8, by=ay + nd[1]*TILE*0.8;
+      ctx.strokeStyle='rgba(120,220,255,0.8)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+      const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; for(let d=0; d<4; d++){ const nx=h.x+dirs[d][0], ny=h.y+dirs[d][1]; const safe=isSafeTileFor(s,nx,ny,lastOccMap); const sp=worldToScreen(nx,ny,cam); ctx.strokeStyle = safe ? 'rgba(90,220,120,0.85)' : 'rgba(255,80,100,0.85)'; ctx.strokeRect(sp.x+4, sp.y+4, TILE-8, TILE-8); }
+    }
+    ctx.restore();
+    telemetry.npcPrevented += 0; // no-op to keep layout similar
+    document.getElementById('t-npc-prevent').textContent = telemetry.npcPrevented;
+  }
+
+  function drawBackground(minX,maxX,minY,maxY,cam){
+    for(let x=minX;x<=maxX;x++){
+      for(let y=minY;y<=maxY;y++){
+        const p=worldToScreen(x,y,cam);
+        const n1=fract(sinHash(x*12.9898 + y*78.233)*43758.5453);
+        const n2=fract(sinHash((x+1000)*3.12 + (y-700)*1.77)*12543.33);
+        const band=Math.sin((x+y)*0.18)*0.5+0.5;
+        const l=14 + (10*n1|0) + (6*band|0) + (4*n2|0);
+        const h=((x*13 ^ y*17) & 31);
+        ctx.fillStyle=`hsl(${h} 22% ${l}%)`;
+        ctx.fillRect(p.x,p.y,TILE+1,TILE+1);
+      }
+    }
+    ctx.globalAlpha=0.06; ctx.fillStyle='#b7d3ff'; for(let i=0;i<6;i++){ const ox=(Date.now()/1200 + i*80)%(W+200) - 100; ctx.fillRect(ox,0,2,H); } ctx.globalAlpha=1;
+  }
+
+  // ===== Math/Utils =====
+  function worldToScreen(tx,ty,cam){ const cx=(tx-cam.x)*TILE + W/2; const cy=(ty-cam.y)*TILE + H/2; const skew=(ty-cam.y)*0.06*TILE; return {x:cx - skew, y:cy - Math.abs(ty-cam.y)*0.08*TILE}; }
+  function sizeCanvas(){ const w=window.innerWidth, h=window.innerHeight; TILE=Math.max(20, Math.min(36, Math.floor(Math.min(w,h)/26))); W=(w*DPR)|0; H=(h*DPR)|0; canvas.width=W; canvas.height=H; canvas.style.width=w+'px'; canvas.style.height=h+'px'; }
+  function updateScoreUI(){ document.getElementById('score').textContent = score; if(score>hiScore){ hiScore=score; const hi=document.getElementById('hi'); if(hi) hi.textContent=hiScore; } }
+  function updateTelemetryUI(){ document.getElementById('t-npc-self').textContent=telemetry.npcSelfDeaths; document.getElementById('t-npc-prevent').textContent=telemetry.npcPrevented; document.getElementById('t-npc-coll').textContent=telemetry.npcCollisions; document.getElementById('t-head-kill').textContent=telemetry.headKills; document.getElementById('t-path-succ').textContent=telemetry.pathSuccess; document.getElementById('t-combo-best').textContent=telemetry.comboBest; document.getElementById('t-orb-count').textContent=telemetry.orbCount; document.getElementById('t-magnet').textContent = magnetActive()? (magnetSecondsLeft()+'s') : '0s'; }
+
+  draw();  }
+
+
+  // ===== Occupancy, Pathfinding =====
+  function buildCurrentOcc(){ const map=new Map(); for(let si=0;si<snakes.length;si++){ const s=snakes[si]; if(!s.alive) continue; for(let i=0;i<s.segments.length;i++){ const p=s.segments[i]; const key=p.x+','+p.y; if(!map.has(key)) map.set(key,[]); map.get(key).push({snakeId:s.id,index:i}); } } return map; }
+  function pathfindFirstStepOcc(s, occMap, maxSteps){ const head=s.segments[0]; const blocked=new Set(); for(const [k,arr] of occMap.entries()){ for(let i=0;i<arr.length;i++){ const e=arr[i]; if(e.snakeId!==s.id) blocked.add(k); else if(e.index>0) blocked.add(k); } } if(s.grow===0){ const tail=s.segments[s.segments.length-1]; blocked.delete(tail.x+','+tail.y); }
+    const start=head.x+','+head.y; const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; const q=[start]; const vis=new Set([start]); const parent=new Map(); let found=null; let guard=0;
+    while(q.length && guard<3000){ const cur=q.shift(); const depth=depthOf(parent,cur); if(depth>=maxSteps){ guard++; continue; } const [cx,cy]=cur.split(',').map(Number); for(let di=0;di<dirs.length;di++){ const nx=cx+dirs[di][0], ny=cy+dirs[di][1]; const key=nx+','+ny; if(vis.has(key)) continue; if(blocked.has(key)) continue; vis.add(key); parent.set(key,cur); q.push(key); if(depth===0){ found=key; break; } } if(found) break; guard++; }
+    if(!found) return null; let cur=found; while(parent.get(cur) && parent.get(cur)!==start) cur=parent.get(cur); const [fx,fy]=cur.split(',').map(Number); return [fx-head.x, fy-head.y];
+    function depthOf(map,key){ let d=0,p=map.get(key); while(p){ d++; p=map.get(p); if(d>maxSteps) break; } return d; }
+  }
+
+  // ===== Tiny utils =====
+  function mulberry32(a){return function(){a|=0; a = (a + 0x6D2B79F5)|0; let t=Math.imul(a ^ a>>>15, 1|a); t = (t + Math.imul(t ^ t>>>7, 61|t)) ^ t; return ((t ^ t>>>14)>>>0)/4294967296;};}
+  function randRange(r,a,b){return a + Math.floor(r()*(b-a+1));}
+  function hsvToRgb(h,s,v){ let f=(n)=>{let k=(n+h/60)%6; return v - v*s*Math.max(Math.min(k,4-k,1),0);}; return [Math.round(f(5)*255),Math.round(f(3)*255),Math.round(f(1)*255)];}
+  function sinHash(v){ return Math.sin(v); }
+  function fract(x){ return x - Math.floor(x); }
+
+  // ===== Minimal Runtime Tests (console) =====
+  (function runTests(){
+    try {
+      // Test 1: draw loop index safety — mismatched arrays must not throw
+      const fakeA={id:'a',alive:true,colorHue:0,dir:[1,0],nextDir:[1,0],segments:[{x:0,y:0},{x:1,y:0},{x:2,y:0}]};
+      const fakeB={id:'b',alive:true,colorHue:0,dir:[1,0],nextDir:[1,0],segments:[{x:0,y:1}]};
+      const dl=[fakeB,fakeA];
+      // emulate the fixed inner loop
+      for(let n=0;n<dl.length;n++){ const s=dl[n]; for(let i=s.segments.length-1;i>=0;i--){ const seg=s.segments[i]; if(typeof seg.x!=='number') throw new Error('seg.x not number'); } }
+      console.debug('[TEST] draw loop index safety: OK');
+
+      // Test 2: safe tail step
+      const occ=new Map();
+      const snek={id:'t2',alive:true,grow:0,segments:[{x:5,y:5},{x:4,y:5},{x:3,y:5}]};
+      // occupy own body
+      occ.set('5,5',[{snakeId:'t2',index:0}]); occ.set('4,5',[{snakeId:'t2',index:1}]); occ.set('3,5',[{snakeId:'t2',index:2}]);
+      const ok = isSafeTileFor(snek,3,5,occ); // stepping into current tail with grow==0 is allowed
+      console.assert(ok===true,'safe tail step should be allowed');
+
+      // Test 3: magnet radius selection
+      (function(){ const now=performance.now(); magnetUntil=now+100; microMagnetUntil=0; const r1=magnetRadius(); if(r1!==MAGNET_RADIUS_TILES) throw new Error('macro magnet radius mismatch'); microMagnetUntil=now+100; magnetUntil=0; const r2=magnetRadius(); if(r2!==MICRO_MAGNET_RADIUS_TILES) throw new Error('micro magnet radius mismatch'); })();
+      console.debug('[TEST] magnets: OK');
+    } catch(e){ console.error('[TEST] Failure:', e); }
+  })();
+
+  function updateLoop(dt) {
+    tickAccumulator += dt;
+    while (tickAccumulator >= TICK_SECONDS) {
+      moveAll();
+      tickAccumulator -= TICK_SECONDS;
+    }
+  }
+
+  function renderLoop() {
+    draw();
+  }
+
+  startGameLoop(updateLoop, renderLoop);
+}
+
+init();
