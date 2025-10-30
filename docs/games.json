@@ -11,7 +11,7 @@
     "slug": "breakout",
     "title": "Breakout",
     "href": "breakout.html",
-    "description": "Clear cascading waves of bricks with satisfying paddle control, power‑ups, and punchy particle FX.",
+    "description": "Tackle handcrafted gauntlets, chain combos, and harness multiball power-ups in a neon breakout redux.",
     "meta": ["Arcade", "Reflex", "Keyboard"],
     "tags": ["arcade", "classic", "brick-breaker"]
   },
@@ -19,7 +19,7 @@
     "slug": "snake",
     "title": "Snake",
     "href": "snake.html",
-    "description": "Grow the neon serpent, collect food, and survive as the grid fills with your own twisting tail.",
+    "description": "Pick a ruleset, dodge new hazards, and chase combo multipliers across a moody neon grid.",
     "meta": ["Arcade", "Endless", "Keyboard"],
     "tags": ["arcade", "classic", "endless"]
   },
@@ -27,7 +27,7 @@
     "slug": "space-invaders",
     "title": "Space Invaders",
     "href": "space_invaders.html",
-    "description": "Defend Earth from descending alien squadrons with responsive shooting and smooth scaling difficulty.",
+    "description": "Hold the line with reactive shields, alien tech power-ups, and a chargeable super beam across escalating waves.",
     "meta": ["Shooter", "Retro", "Keyboard"],
     "tags": ["shooter", "classic", "arcade"]
   },
@@ -35,7 +35,7 @@
     "slug": "bullet-hell",
     "title": "Bullet Hell",
     "href": "bullet_hell.html",
-    "description": "Dodge intricate bullet patterns and weave through mesmerizing particle storms to chase high scores.",
+    "description": "Phase-based boss patterns reward razor-thin grazes, smart bomb usage, and relentless score climbing.",
     "meta": ["Shooter", "Endless", "Hard"],
     "tags": ["shooter", "endless", "challenge"]
   },
