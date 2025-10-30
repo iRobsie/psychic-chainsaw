@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Snake</title>
+  <style>
+    body { margin:0; background:#222; font-family:sans-serif; color:#eee; }
+    #game { display:block; width:100%; height:100%; background:#000; }
+    .instructions { padding:12px; font-size:14px; line-height:1.4; background:#181818; color:#ccc; border-bottom:1px solid #333; }
+  </style>
+</head>
+<body>
+  <p class="instructions">Guide the snake to eat the red food and grow.  Use the <strong>Arrow</strong> keys to change direction.  Avoid hitting the walls or running into your own tail.  Each piece of food increases your score and length.  Press <strong>Space</strong> to restart when you crash.</p>
+  <canvas id="game"></canvas>
+  <script type="module">
+    import { initCanvas, clear, drawRect, drawText, resizeCanvasToDisplaySize } from './game-lib/render/canvas.js';
+    import { startGameLoop } from './game-lib/core/loop.js';
+    import { initKeyboard, isKeyDown } from './game-lib/input/keyboard.js';
+
+    const WORLD_WIDTH = 640;
+    const WORLD_HEIGHT = 480;
+    const { canvas, ctx } = initCanvas('#game', WORLD_WIDTH, WORLD_HEIGHT);
+    let displayWidth = WORLD_WIDTH;
+    let displayHeight = WORLD_HEIGHT;
+
+    function resizeCanvas() {
+      const size = resizeCanvasToDisplaySize(canvas, ctx, window.innerWidth, window.innerHeight);
+      displayWidth = size.width;
+      displayHeight = size.height;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Grid settings remain based on the world size
+    const cellSize = 20;
+    const cols = Math.floor(WORLD_WIDTH / cellSize);
+    const rows = Math.floor(WORLD_HEIGHT / cellSize);
+
+    let snake = [];
+    let dir = { x: 1, y: 0 };
+    let nextDir = { x: 1, y: 0 };
+    let food = { x: 10, y: 10 };
+    let gameOver = false;
+    let score = 0;
+    let stepTimer = 0;
+    const stepInterval = 0.12;
+
+    function resetGame() {
+      snake = [ { x: Math.floor(cols / 2), y: Math.floor(rows / 2) } ];
+      dir = { x: 1, y: 0 };
+      nextDir = { x: 1, y: 0 };
+      placeFood();
+      gameOver = false;
+      score = 0;
+      stepTimer = 0;
+    }
+
+    function placeFood() {
+      while (true) {
+        const fx = Math.floor(Math.random() * cols);
+        const fy = Math.floor(Math.random() * rows);
+        if (!snake.some(seg => seg.x === fx && seg.y === fy)) {
+          food.x = fx;
+          food.y = fy;
+          return;
+        }
+      }
+    }
+
+    // Keyboard handling
+    window.addEventListener('keydown', (e) => {
+      if (gameOver && e.code === 'Space') {
+        resetGame();
+        return;
+      }
+      switch (e.code) {
+        case 'ArrowUp':
+          if (dir.y === 0) nextDir = { x: 0, y: -1 };
+          break;
+        case 'ArrowDown':
+          if (dir.y === 0) nextDir = { x: 0, y: 1 };
+          break;
+        case 'ArrowLeft':
+          if (dir.x === 0) nextDir = { x: -1, y: 0 };
+          break;
+        case 'ArrowRight':
+          if (dir.x === 0) nextDir = { x: 1, y: 0 };
+          break;
+      }
+    });
+
+    function update(dt) {
+      stepTimer += dt;
+      if (stepTimer >= stepInterval && !gameOver) {
+        stepTimer -= stepInterval;
+        dir = { ...nextDir };
+        const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+        // Check collisions
+        if (head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows || snake.some(seg => seg.x === head.x && seg.y === head.y)) {
+          gameOver = true;
+          return;
+        }
+        snake.unshift(head);
+        if (head.x === food.x && head.y === food.y) {
+          score++;
+          placeFood();
+        } else {
+          snake.pop();
+        }
+      }
+    }
+
+    function render() {
+      const scaleX = displayWidth / WORLD_WIDTH;
+      const scaleY = displayHeight / WORLD_HEIGHT;
+      ctx.save();
+      ctx.scale(scaleX, scaleY);
+      clear(ctx, '#000');
+      // Draw food
+      drawRect(ctx, food.x * cellSize, food.y * cellSize, cellSize - 2, cellSize - 2, '#f33');
+      // Draw snake
+      snake.forEach((seg, index) => {
+        const color = index === 0 ? '#0f0' : '#7c7';
+        drawRect(ctx, seg.x * cellSize, seg.y * cellSize, cellSize - 2, cellSize - 2, color);
+      });
+      // Score and game over text
+      drawText(ctx, `Score: ${score}`, 10, 10, { color:'#fff', font:'16px monospace' });
+      if (gameOver) {
+        drawText(ctx, 'Game Over!', WORLD_WIDTH / 2, 200, { color:'#fff', font:'32px sans-serif', textAlign:'center' });
+        drawText(ctx, 'Press Space to restart', WORLD_WIDTH / 2, 240, { color:'#ccc', font:'16px sans-serif', textAlign:'center' });
+      }
+      ctx.restore();
+    }
+
+    initKeyboard();
+    resetGame();
+    startGameLoop(update, render);
+  </script>
+</body>
+</html>

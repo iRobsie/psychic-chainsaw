@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
+  <title>TinyCraft — platform upgrades</title>
+  <style>
+  html,body{height:100%;margin:0;background:#8ec5ff;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  #cv{width:100%;height:100%;display:block;background:#87b6ff;cursor:crosshair}
+  .hud{position:fixed;inset:0;pointer-events:none;color:#fff;text-shadow:0 1px 2px #000c;font-size:14px;display:flex;flex-direction:column;justify-content:space-between}
+  .chip{background:#0007;border:1px solid #fff3;border-radius:8px;padding:6px 10px;backdrop-filter:blur(4px)}
+  .top{padding:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .bottom{padding:8px}
+  .hot{display:flex;gap:6px}
+  .slot{width:28px;height:28px;border:2px solid #fff6;border-radius:6px;background:#0004;display:grid;place-items:center}
+  .sel{border-color:#fff;box-shadow:0 0 8px #fff}
+  .sw{width:16px;height:16px;border-radius:3px;border:1px solid #fff9}
+  .xh{position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px}
+  .xh:before,.xh:after{content:"";position:absolute;background:#fff;opacity:.9;box-shadow:0 0 2px #000a}
+  .xh:before{left:8px;top:0;width:2px;height:18px}
+  .xh:after{top:8px;left:0;width:18px;height:2px}
+  .btns{pointer-events:auto;display:flex;gap:6px}
+  .btn{pointer-events:auto;background:#fff1;border:1px solid #fff5;border-radius:8px;padding:3px 8px;margin:0;cursor:pointer}
+  .btn:hover{background:#fff2}
+  .mini{position:fixed;right:10px;bottom:10px;width:150px;height:150px;border:1px solid #fff7;border-radius:6px;background:#0005;backdrop-filter:blur(2px)}
+  .mini canvas{width:100%;height:100%;display:block}
+  </style>
+</head>
+<body>
+  <canvas id="cv"></canvas>
+  <div class="hud">
+    <div class="top">
+      <div class="chip" id="fps">FPS 0</div>
+      <div class="chip" id="seed">seed</div>
+      <div class="chip">Upgrades: worker meshing, IndexedDB saves, WebGL2/VAO fallback, gamepad, fullscreen, audio, translucent/swimmable water.</div>
+      <div class="chip btns">
+        <button class="btn" id="btnFS">Fullscreen</button>
+        <button class="btn" id="btnAim">Pointer‑lock</button>
+        <button class="btn" id="btnSave">Save</button>
+        <button class="btn" id="btnLoad">Load</button>
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="chip">Hotbar: <span id="hot" class="hot"></span></div>
+    </div>
+    <div class="mini"><canvas id="mm" width="64" height="64"></canvas></div>
+    <div class="xh"></div>
+  </div>
+  <script type="module" src="./games/tinycraft/main.js"></script>
+</body>
+</html>
