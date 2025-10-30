@@ -2,16 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bullet Hell</title>
-  <style>
-    body { margin:0; background:#000; color:#fff; font-family:Arial, sans-serif; }
-    #game { display:block; width:100%; height:100%; background:#000; }
-    .instructions { padding:12px; font-size:14px; line-height:1.4; background:#0a0a0a; color:#ccc; border-bottom:1px solid #222; }
-  </style>
+  <link rel="stylesheet" href="styles/layout.css" />
 </head>
-<body>
-  <p class="instructions">Survive as long as you can while bullets rain down from the center of the arena.  Move with the <strong>Arrow</strong> keys or <strong>W/A/S/D</strong> to dodge the streams of bullets.  Each wave grows faster as your survival time increases.  If any bullet touches you, the game ends.  Press <strong>R</strong> to restart.</p>
-  <canvas id="game"></canvas>
+<body class="theme-space">
+  <main class="game-page">
+    <div class="game-layout">
+      <section class="instructions">
+        <p>
+          Survive as long as you can while bullets rain down from the center of the arena. Move with the <strong>Arrow</strong>
+          keys or <strong>W/A/S/D</strong> to dodge the streams of bullets. Each wave grows faster as your survival time increases.
+          If any bullet touches you, the game ends. Press <strong>R</strong> to restart.
+        </p>
+      </section>
+      <div class="game-stage">
+        <canvas id="game" class="game-canvas"></canvas>
+      </div>
+    </div>
+  </main>
   <script type="module">
     import { initCanvas, clear, drawCircle, drawText } from './game-lib/render/canvas.js';
     import { startGameLoop } from './game-lib/core/loop.js';
@@ -19,11 +28,14 @@
 
     // Initialize canvas and keyboard
     const { canvas, ctx } = initCanvas('#game', 640, 480);
+    const stage = document.querySelector('.game-stage');
+    const player = { x: 320, y: 400, radius: 10, speed: 220 };
     initKeyboard();
 
     function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const rect = stage.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
       // Keep player near bottom center on resize
       player.x = canvas.width / 2;
       player.y = canvas.height * 0.8;
@@ -31,7 +43,6 @@
     window.addEventListener('resize', resizeCanvas);
 
     // Game state
-    const player = { x: 320, y: 400, radius: 10, speed: 220 };
     resizeCanvas();
     const bullets = [];
     let timeSinceLastWave = 0;

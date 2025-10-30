@@ -2,16 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Space Invaders</title>
-  <style>
-    body { margin:0; background:#000; color:#fff; font-family:Arial, sans-serif; }
-    #game { display:block; width:100%; height:100%; background:#000; }
-    .instructions { padding:12px; font-size:14px; line-height:1.4; background:#0a0a0a; color:#ccc; border-bottom:1px solid #222; }
-  </style>
+  <link rel="stylesheet" href="styles/layout.css" />
 </head>
-<body>
-  <p class="instructions">Defend your homeworld from waves of invading aliens.  Move left and right with the <strong>Arrow</strong> keys or <strong>A/D</strong> keys and fire bullets with <strong>Space</strong> (or <strong>W</strong>).  Aliens get faster over time and descend when they reach the edges.  Eliminate all aliens to win.  If even one invader breaches your line, it's game over.  Press <strong>R</strong> (or Space) to restart after a win or loss.</p>
-  <canvas id="game"></canvas>
+<body class="theme-space">
+  <main class="game-page">
+    <div class="game-layout">
+      <section class="instructions">
+        <p>
+          Defend your homeworld from waves of invading aliens. Move left and right with the <strong>Arrow</strong> keys or
+          <strong>A/D</strong> keys and fire bullets with <strong>Space</strong> (or <strong>W</strong>). Aliens get faster over
+          time and descend when they reach the edges. Eliminate all aliens to win. If even one invader breaches your line, it's
+          game over. Press <strong>R</strong> (or Space) to restart after a win or loss.
+        </p>
+      </section>
+      <div class="game-stage">
+        <canvas id="game" class="game-canvas"></canvas>
+      </div>
+    </div>
+  </main>
   <script type="module">
     // Import our game library modules from the root relative path
     import { initCanvas, clear, drawRect, drawText } from './game-lib/render/canvas.js';
@@ -21,9 +31,12 @@
 
     // Initialize the canvas and keyboard
     const { canvas, ctx } = initCanvas('#game', 640, 480);
+    const stage = document.querySelector('.game-stage');
+    const player = { x: 0, y: 0, w: 40, h: 20, speed: 300 };
     function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const rect = stage.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
       // Reposition the player near the bottom center on resize
       player.x = canvas.width / 2 - player.w / 2;
       player.y = canvas.height - 40;
@@ -32,7 +45,6 @@
     initKeyboard();
 
     // Game state
-    const player = { x: 0, y: 0, w: 40, h: 20, speed: 300 };
     resizeCanvas();
     const bullets = [];
     const aliens = [];

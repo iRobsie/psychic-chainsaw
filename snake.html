@@ -2,16 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Snake</title>
-  <style>
-    body { margin:0; background:#222; font-family:sans-serif; color:#eee; }
-    #game { display:block; width:100%; height:100%; background:#000; }
-    .instructions { padding:12px; font-size:14px; line-height:1.4; background:#181818; color:#ccc; border-bottom:1px solid #333; }
-  </style>
+  <link rel="stylesheet" href="styles/layout.css" />
 </head>
-<body>
-  <p class="instructions">Guide the snake to eat the red food and grow.  Use the <strong>Arrow</strong> keys to change direction.  Avoid hitting the walls or running into your own tail.  Each piece of food increases your score and length.  Press <strong>Space</strong> to restart when you crash.</p>
-  <canvas id="game"></canvas>
+<body class="theme-snake">
+  <main class="game-page">
+    <div class="game-layout">
+      <section class="instructions">
+        <p>
+          Guide the snake to eat the red food and grow. Use the <strong>Arrow</strong> keys to change direction. Avoid hitting the
+          walls or running into your own tail. Each piece of food increases your score and length. Press <strong>Space</strong> to
+          restart when you crash.
+        </p>
+      </section>
+      <div class="game-stage">
+        <canvas id="game" class="game-canvas"></canvas>
+      </div>
+    </div>
+  </main>
   <script type="module">
     import { initCanvas, clear, drawRect, drawText } from './game-lib/render/canvas.js';
     import { startGameLoop } from './game-lib/core/loop.js';
@@ -20,10 +29,12 @@
     const WORLD_WIDTH = 640;
     const WORLD_HEIGHT = 480;
     const { canvas, ctx } = initCanvas('#game', WORLD_WIDTH, WORLD_HEIGHT);
+    const stage = document.querySelector('.game-stage');
 
     function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const rect = stage.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
     }
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
