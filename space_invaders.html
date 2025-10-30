@@ -14,19 +14,22 @@
   <canvas id="game"></canvas>
   <script type="module">
     // Import our game library modules from the root relative path
-    import { initCanvas, clear, drawRect, drawText } from './game-lib/render/canvas.js';
+    import { initCanvas, clear, drawRect, drawText, resizeCanvasToDisplaySize } from './game-lib/render/canvas.js';
     import { startGameLoop } from './game-lib/core/loop.js';
     import { initKeyboard, isKeyDown } from './game-lib/input/keyboard.js';
     import { aabbIntersect } from './game-lib/physics/collision.js';
 
     // Initialize the canvas and keyboard
     const { canvas, ctx } = initCanvas('#game', 640, 480);
+    let displayWidth = 640;
+    let displayHeight = 480;
     function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const size = resizeCanvasToDisplaySize(canvas, ctx, window.innerWidth, window.innerHeight);
+      displayWidth = size.width;
+      displayHeight = size.height;
       // Reposition the player near the bottom center on resize
-      player.x = canvas.width / 2 - player.w / 2;
-      player.y = canvas.height - 40;
+      player.x = displayWidth / 2 - player.w / 2;
+      player.y = displayHeight - 40;
     }
     window.addEventListener('resize', resizeCanvas);
     initKeyboard();
@@ -61,13 +64,14 @@
     initAliens();
 
     function resetGame() {
-      player.x = canvas.width / 2 - player.w / 2;
+      player.x = displayWidth / 2 - player.w / 2;
       bullets.length = 0;
       initAliens();
       alienDirection = 1;
       alienSpeed = 40;
       score = 0;
       gameOver = false;
+      player.y = displayHeight - 40;
     }
 
     function update(dt) {
@@ -80,7 +84,7 @@
         player.x += player.speed * dt;
       }
       // Clamp within screen
-      player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+      player.x = Math.max(0, Math.min(displayWidth - player.w, player.x));
       // Firing bullets
       bulletCooldown -= dt;
       if ((isKeyDown('Space') || isKeyDown('KeyW')) && bulletCooldown <= 0) {
@@ -99,7 +103,7 @@
       let reachedEdge = false;
       for (const a of aliens) {
         a.x += alienDirection * alienSpeed * dt;
-        if (a.x < 0 || a.x + a.w > canvas.width) reachedEdge = true;
+        if (a.x < 0 || a.x + a.w > displayWidth) reachedEdge = true;
       }
       if (reachedEdge) {
         alienDirection *= -1;
@@ -153,9 +157,9 @@
       drawText(ctx, `Score: ${score}`, 10, 10, { color:'#fff', font:'16px monospace' });
       drawText(ctx, `High: ${highScore}`, 10, 28, { color:'#888', font:'14px monospace' });
       if (gameOver) {
-        drawText(ctx, 'Game Over!', canvas.width / 2, 200, { color:'#fff', font:'32px sans-serif', textAlign:'center' });
-        drawText(ctx, aliens.length === 0 ? 'You Win!' : 'Invaders Reached You', canvas.width / 2, 240, { color:'#ccc', font:'18px sans-serif', textAlign:'center' });
-        drawText(ctx, 'Press R or Space to restart', canvas.width / 2, 280, { color:'#888', font:'14px sans-serif', textAlign:'center' });
+        drawText(ctx, 'Game Over!', displayWidth / 2, 200, { color:'#fff', font:'32px sans-serif', textAlign:'center' });
+        drawText(ctx, aliens.length === 0 ? 'You Win!' : 'Invaders Reached You', displayWidth / 2, 240, { color:'#ccc', font:'18px sans-serif', textAlign:'center' });
+        drawText(ctx, 'Press R or Space to restart', displayWidth / 2, 280, { color:'#888', font:'14px sans-serif', textAlign:'center' });
       }
     }
 

@@ -13,20 +13,23 @@
   <p class="instructions">Survive as long as you can while bullets rain down from the center of the arena.  Move with the <strong>Arrow</strong> keys or <strong>W/A/S/D</strong> to dodge the streams of bullets.  Each wave grows faster as your survival time increases.  If any bullet touches you, the game ends.  Press <strong>R</strong> to restart.</p>
   <canvas id="game"></canvas>
   <script type="module">
-    import { initCanvas, clear, drawCircle, drawText } from './game-lib/render/canvas.js';
+    import { initCanvas, clear, drawCircle, drawText, resizeCanvasToDisplaySize } from './game-lib/render/canvas.js';
     import { startGameLoop } from './game-lib/core/loop.js';
     import { initKeyboard, isKeyDown } from './game-lib/input/keyboard.js';
 
     // Initialize canvas and keyboard
     const { canvas, ctx } = initCanvas('#game', 640, 480);
+    let displayWidth = 640;
+    let displayHeight = 480;
     initKeyboard();
 
     function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const size = resizeCanvasToDisplaySize(canvas, ctx, window.innerWidth, window.innerHeight);
+      displayWidth = size.width;
+      displayHeight = size.height;
       // Keep player near bottom center on resize
-      player.x = canvas.width / 2;
-      player.y = canvas.height * 0.8;
+      player.x = displayWidth / 2;
+      player.y = displayHeight * 0.8;
     }
     window.addEventListener('resize', resizeCanvas);
 
@@ -44,8 +47,8 @@
     function spawnWave() {
       const bulletCount = 32;
       const speed = 100 + survivedTime * 5;
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
+      const centerX = displayWidth / 2;
+      const centerY = displayHeight / 2;
       for (let i = 0; i < bulletCount; i++) {
         const angle = (i / bulletCount) * Math.PI * 2;
         const vx = Math.cos(angle) * speed;
@@ -55,8 +58,8 @@
     }
     function resetGame() {
       bullets.length = 0;
-      player.x = canvas.width / 2;
-      player.y = canvas.height * 0.8;
+      player.x = displayWidth / 2;
+      player.y = displayHeight * 0.8;
       timeSinceLastWave = 0;
       survivedTime = 0;
       gameOver = false;
@@ -83,14 +86,14 @@
       player.x += dx * player.speed * dt;
       player.y += dy * player.speed * dt;
       // Clamp player inside the arena
-      player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
-      player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+      player.x = Math.max(player.radius, Math.min(displayWidth - player.radius, player.x));
+      player.y = Math.max(player.radius, Math.min(displayHeight - player.radius, player.y));
       // Update bullets and check collisions
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.x += b.vx * dt;
         b.y += b.vy * dt;
-        if (b.x < -b.radius || b.x > canvas.width + b.radius || b.y < -b.radius || b.y > canvas.height + b.radius) {
+        if (b.x < -b.radius || b.x > displayWidth + b.radius || b.y < -b.radius || b.y > displayHeight + b.radius) {
           bullets.splice(i, 1);
           continue;
         }
@@ -117,8 +120,8 @@
       drawText(ctx, `Survived: ${survivedTime.toFixed(1)}s`, 10, 10, { color:'#fff', font:'16px monospace' });
       drawText(ctx, `Best: ${highScore.toFixed(1)}s`, 10, 28, { color:'#888', font:'14px monospace' });
       if (gameOver) {
-        drawText(ctx, 'Game Over!', canvas.width / 2, 200, { color:'#fff', font:'32px sans-serif', textAlign:'center' });
-        drawText(ctx, 'Press R to restart', canvas.width / 2, 240, { color:'#ccc', font:'16px sans-serif', textAlign:'center' });
+        drawText(ctx, 'Game Over!', displayWidth / 2, 200, { color:'#fff', font:'32px sans-serif', textAlign:'center' });
+        drawText(ctx, 'Press R to restart', displayWidth / 2, 240, { color:'#ccc', font:'16px sans-serif', textAlign:'center' });
       }
     }
     window.addEventListener('keydown', (e) => {
