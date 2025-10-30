@@ -75,6 +75,11 @@ const FILTER_CATEGORIES = [
   { label: "Challenge", value: "challenge" },
 ];
 
+const HAS_STRING_NORMALIZE = typeof String.prototype.normalize === "function";
+// Use a basic combining mark range so the search logic works in browsers that
+// don't support Unicode property escapes (e.g. older Safari builds).
+const DIACRITIC_PATTERN = /[\u0300-\u036f]/g;
+
 document.addEventListener("DOMContentLoaded", () => {
   const grid = document.querySelector("[data-role=game-grid]");
   const status = document.querySelector("[data-role=result-count]");
@@ -115,7 +120,18 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function normalise(text) {
-    return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+    if (text == null) {
+      return "";
+    }
+
+    const safeText = String(text);
+    const lower = safeText.toLowerCase();
+
+    if (!HAS_STRING_NORMALIZE) {
+      return lower;
+    }
+
+    return safeText.normalize("NFD").replace(DIACRITIC_PATTERN, "").toLowerCase();
   }
 
   function matchesQuery(game, query) {
@@ -150,10 +166,12 @@ document.addEventListener("DOMContentLoaded", () => {
       ? `Showing all ${GAMES.length} games`
       : `Showing ${matches.length} of ${GAMES.length} games`;
 
+    grid.setAttribute("aria-busy", "true");
     grid.textContent = "";
 
     if (matches.length === 0) {
       emptyState.hidden = false;
+      grid.setAttribute("aria-busy", "false");
       return;
     }
 
@@ -185,6 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     grid.appendChild(fragment);
+    grid.setAttribute("aria-busy", "false");
   }
 
   searchInput.addEventListener("input", render);
