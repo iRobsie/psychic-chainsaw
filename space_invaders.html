@@ -2,174 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Space Invaders</title>
+  <title>Orbitfall Command</title>
   <style>
-    body { margin:0; background:#000; color:#fff; font-family:Arial, sans-serif; }
-    #game { display:block; width:100%; height:100%; background:#000; }
-    .instructions { padding:12px; font-size:14px; line-height:1.4; background:#0a0a0a; color:#ccc; border-bottom:1px solid #222; }
+    :root { color-scheme: dark; }
+    body { margin:0; background:#01060f; color:#e2e8f0; font-family:'JetBrains Mono',system-ui,sans-serif; display:flex; flex-direction:column; min-height:100vh; }
+    .instructions { padding:16px; font-size:14px; line-height:1.5; background:rgba(15,23,42,0.85); border-bottom:1px solid rgba(148,163,184,0.15); }
+    .instructions strong { color:#38bdf8; }
+    #game { flex:1; display:block; width:100%; height:100%; }
   </style>
 </head>
 <body>
-  <p class="instructions">Defend your homeworld from waves of invading aliens.  Move left and right with the <strong>Arrow</strong> keys or <strong>A/D</strong> keys and fire bullets with <strong>Space</strong> (or <strong>W</strong>).  Aliens get faster over time and descend when they reach the edges.  Eliminate all aliens to win.  If even one invader breaches your line, it's game over.  Press <strong>R</strong> (or Space) to restart after a win or loss.</p>
+  <section class="instructions">
+    <p>
+      Defend the skyline against adaptive alien armadas. Strafe with <strong>←/→</strong> or <strong>A/D</strong>, fire with <strong>Space</strong>/<strong>W</strong>, catch power-ups to unlock rapid fire, pierce shots, bunker repairs, and nova strikes. Clear waves, hunt the mothership, and keep humanity in orbit.
+    </p>
+  </section>
   <canvas id="game"></canvas>
-  <script type="module">
-    // Import our game library modules from the root relative path
-    import { initCanvas, clear, drawRect, drawText, resizeCanvasToDisplaySize } from './game-lib/render/canvas.js';
-    import { startGameLoop } from './game-lib/core/loop.js';
-    import { initKeyboard, isKeyDown } from './game-lib/input/keyboard.js';
-    import { aabbIntersect } from './game-lib/physics/collision.js';
-
-    // Initialize the canvas and keyboard
-    const { canvas, ctx } = initCanvas('#game', 640, 480);
-    let displayWidth = 640;
-    let displayHeight = 480;
-    function resizeCanvas() {
-      const size = resizeCanvasToDisplaySize(canvas, ctx, window.innerWidth, window.innerHeight);
-      displayWidth = size.width;
-      displayHeight = size.height;
-      // Reposition the player near the bottom center on resize
-      player.x = displayWidth / 2 - player.w / 2;
-      player.y = displayHeight - 40;
-    }
-    window.addEventListener('resize', resizeCanvas);
-    initKeyboard();
-
-    // Game state
-    const player = { x: 0, y: 0, w: 40, h: 20, speed: 300 };
-    resizeCanvas();
-    const bullets = [];
-    const aliens = [];
-    let alienDirection = 1;
-    let alienSpeed = 40;
-    let bulletCooldown = 0;
-    let score = 0;
-    let highScore = 0;
-    let gameOver = false;
-
-    // Create a grid of aliens (5 rows × 8 columns)
-    function initAliens() {
-      aliens.length = 0;
-      const rows = 5;
-      const cols = 8;
-      const spacingX = 60;
-      const spacingY = 40;
-      const startX = 80;
-      const startY = 60;
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          aliens.push({ x: startX + c * spacingX, y: startY + r * spacingY, w: 30, h: 20 });
-        }
-      }
-    }
-    initAliens();
-
-    function resetGame() {
-      player.x = displayWidth / 2 - player.w / 2;
-      bullets.length = 0;
-      initAliens();
-      alienDirection = 1;
-      alienSpeed = 40;
-      score = 0;
-      gameOver = false;
-      player.y = displayHeight - 40;
-    }
-
-    function update(dt) {
-      if (gameOver) return;
-      // Player movement
-      if (isKeyDown('ArrowLeft') || isKeyDown('KeyA')) {
-        player.x -= player.speed * dt;
-      }
-      if (isKeyDown('ArrowRight') || isKeyDown('KeyD')) {
-        player.x += player.speed * dt;
-      }
-      // Clamp within screen
-      player.x = Math.max(0, Math.min(displayWidth - player.w, player.x));
-      // Firing bullets
-      bulletCooldown -= dt;
-      if ((isKeyDown('Space') || isKeyDown('KeyW')) && bulletCooldown <= 0) {
-        bullets.push({ x: player.x + player.w / 2 - 2, y: player.y - 10, w: 4, h: 10, vy: -400 });
-        bulletCooldown = 0.3;
-      }
-      // Update bullets
-      for (let i = bullets.length - 1; i >= 0; i--) {
-        const b = bullets[i];
-        b.y += b.vy * dt;
-        if (b.y + b.h < 0) {
-          bullets.splice(i, 1);
-        }
-      }
-      // Update aliens
-      let reachedEdge = false;
-      for (const a of aliens) {
-        a.x += alienDirection * alienSpeed * dt;
-        if (a.x < 0 || a.x + a.w > displayWidth) reachedEdge = true;
-      }
-      if (reachedEdge) {
-        alienDirection *= -1;
-        for (const a of aliens) {
-          a.y += 20;
-        }
-      }
-      alienSpeed += dt * 2;
-      // Bullet–alien collisions
-      for (let i = bullets.length - 1; i >= 0; i--) {
-        const b = bullets[i];
-        for (let j = aliens.length - 1; j >= 0; j--) {
-          const a = aliens[j];
-          if (aabbIntersect(b, a)) {
-            bullets.splice(i, 1);
-            aliens.splice(j, 1);
-            score += 10;
-            break;
-          }
-        }
-      }
-      // Loss condition: aliens reaching player row
-      for (const a of aliens) {
-        if (a.y + a.h >= player.y) {
-          gameOver = true;
-          highScore = Math.max(highScore, score);
-          break;
-        }
-      }
-      // Win condition: all aliens destroyed
-      if (aliens.length === 0) {
-        gameOver = true;
-        highScore = Math.max(highScore, score);
-      }
-    }
-
-    function render() {
-      // Clear screen
-      clear(ctx, '#000');
-      // Draw player
-      drawRect(ctx, player.x, player.y, player.w, player.h, '#0f0');
-      // Bullets
-      for (const b of bullets) {
-        drawRect(ctx, b.x, b.y, b.w, b.h, '#ff0');
-      }
-      // Aliens
-      for (const a of aliens) {
-        drawRect(ctx, a.x, a.y, a.w, a.h, '#f00');
-      }
-      // UI
-      drawText(ctx, `Score: ${score}`, 10, 10, { color:'#fff', font:'16px monospace' });
-      drawText(ctx, `High: ${highScore}`, 10, 28, { color:'#888', font:'14px monospace' });
-      if (gameOver) {
-        drawText(ctx, 'Game Over!', displayWidth / 2, 200, { color:'#fff', font:'32px sans-serif', textAlign:'center' });
-        drawText(ctx, aliens.length === 0 ? 'You Win!' : 'Invaders Reached You', displayWidth / 2, 240, { color:'#ccc', font:'18px sans-serif', textAlign:'center' });
-        drawText(ctx, 'Press R or Space to restart', displayWidth / 2, 280, { color:'#888', font:'14px sans-serif', textAlign:'center' });
-      }
-    }
-
-    window.addEventListener('keydown', (e) => {
-      if ((e.code === 'KeyR' || e.code === 'Space') && gameOver) {
-        resetGame();
-      }
-    });
-    // Start the loop
-    startGameLoop(update, render);
-  </script>
+  <script type="module" src="./games/space-invaders/main.js"></script>
 </body>
 </html>

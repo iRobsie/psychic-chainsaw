@@ -2,154 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Breakout</title>
+  <title>Breakout Redux</title>
   <style>
-    body { margin:0; background:#111; font-family:sans-serif; }
-    #game { display:block; margin:0 auto; background:#000; }
+    :root { color-scheme: dark; }
+    body { margin: 0; font-family: 'JetBrains Mono', system-ui, sans-serif; background: #01060f; color: #e2e8f0; display:flex; flex-direction:column; min-height:100vh; }
+    #game { flex: 1; display:block; width:100%; height:100%; }
+    .instructions { padding:16px; font-size:14px; line-height:1.5; background:rgba(15,23,42,0.8); border-bottom:1px solid rgba(148,163,184,0.15); }
+    .instructions strong { color:#38bdf8; }
   </style>
 </head>
 <body>
-<canvas id="game" width="640" height="480"></canvas>
-<script type="module">
-  import { initCanvas, clear, drawRect, drawText } from '../game-lib/render/canvas.js';
-  import { startGameLoop } from '../game-lib/core/loop.js';
-  import { initKeyboard, isKeyDown } from '../game-lib/input/keyboard.js';
-
-  const { ctx } = initCanvas('#game', 640, 480);
-  initKeyboard();
-
-  // Game state
-  const paddle = { x: 280, y: 450, w: 80, h: 10, speed: 350 };
-  const ball = { x: 320, y: 300, size: 8, vx: 200, vy: -250 };
-  const rows = 5;
-  const cols = 10;
-  const brickWidth = 60;
-  const brickHeight = 20;
-  const bricks = [];
-  let lives = 3;
-  let score = 0;
-  let levelComplete = false;
-
-  function initBricks() {
-    bricks.length = 0;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        bricks.push({ x: c * brickWidth + 20, y: r * brickHeight + 40, w: brickWidth - 4, h: brickHeight - 4, destroyed: false });
-      }
-    }
-  }
-  initBricks();
-
-  function resetBall() {
-    ball.x = 320;
-    ball.y = 300;
-    ball.vx = (Math.random() < 0.5 ? -1 : 1) * 200;
-    ball.vy = -250;
-  }
-
-  function update(dt) {
-    // Move paddle
-    if (isKeyDown('ArrowLeft')) paddle.x -= paddle.speed * dt;
-    if (isKeyDown('ArrowRight')) paddle.x += paddle.speed * dt;
-    // Clamp paddle
-    if (paddle.x < 0) paddle.x = 0;
-    if (paddle.x + paddle.w > 640) paddle.x = 640 - paddle.w;
-    // Move ball
-    ball.x += ball.vx * dt;
-    ball.y += ball.vy * dt;
-    // Collision with walls
-    if (ball.x < 0) { ball.x = 0; ball.vx *= -1; }
-    if (ball.x + ball.size > 640) { ball.x = 640 - ball.size; ball.vx *= -1; }
-    if (ball.y < 0) { ball.y = 0; ball.vy *= -1; }
-    // Collision with paddle
-    if (
-      ball.x < paddle.x + paddle.w &&
-      ball.x + ball.size > paddle.x &&
-      ball.y + ball.size > paddle.y &&
-      ball.y < paddle.y + paddle.h
-    ) {
-      ball.y = paddle.y - ball.size;
-      ball.vy = -Math.abs(ball.vy);
-      // Adjust horizontal velocity based on where it hit
-      const hit = (ball.x + ball.size / 2) - (paddle.x + paddle.w / 2);
-      ball.vx += hit * 5;
-    }
-    // Collision with bricks
-    for (const brick of bricks) {
-      if (!brick.destroyed && ball.x < brick.x + brick.w && ball.x + ball.size > brick.x && ball.y < brick.y + brick.h && ball.y + ball.size > brick.y) {
-        brick.destroyed = true;
-        score++;
-        // Determine bounce direction: compare overlaps
-        const prevX = ball.x - ball.vx * dt;
-        const prevY = ball.y - ball.vy * dt;
-        let collidedVertically = false;
-        if (prevX + ball.size <= brick.x || prevX >= brick.x + brick.w) {
-          ball.vx *= -1;
-        } else {
-          collidedVertically = true;
-        }
-        if (prevY + ball.size <= brick.y || prevY >= brick.y + brick.h) {
-          if (collidedVertically) {
-            // diagonal hit
-            ball.vy *= -1;
-          } else {
-            ball.vy *= -1;
-          }
-        }
-        break;
-      }
-    }
-    // Check for loss
-    if (ball.y > 480) {
-      lives--;
-      if (lives > 0) {
-        resetBall();
-      } else {
-        // Game over: reset everything
-        lives = 3;
-        score = 0;
-        initBricks();
-        resetBall();
-      }
-    }
-    // Check level completion
-    if (bricks.every(b => b.destroyed)) {
-      levelComplete = true;
-      initBricks();
-      resetBall();
-    }
-  }
-
-  function render() {
-    clear(ctx, '#000');
-    // Draw paddle
-    drawRect(ctx, paddle.x, paddle.y, paddle.w, paddle.h, '#0af');
-    // Draw ball
-    drawRect(ctx, ball.x, ball.y, ball.size, ball.size, '#fa0');
-    // Draw bricks
-    for (const brick of bricks) {
-      if (!brick.destroyed) {
-        drawRect(ctx, brick.x, brick.y, brick.w, brick.h, '#a5f');
-      }
-    }
-    // Draw UI
-    drawText(ctx, `Score: ${score}`, 10, 10, { color:'#fff', font:'16px monospace' });
-    drawText(ctx, `Lives: ${lives}`, 540, 10, { color:'#fff', font:'16px monospace', textAlign:'right' });
-    if (levelComplete) {
-      drawText(ctx, 'Level Complete!', 320, 220, { color:'#fff', font:'28px sans-serif', textAlign:'center' });
-      drawText(ctx, 'Press Space to continue', 320, 256, { color:'#bbb', font:'16px sans-serif', textAlign:'center' });
-    }
-  }
-
-  // Start game loop
-  startGameLoop(update, render);
-
-  // Continue on Space after level completion
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && levelComplete) {
-      levelComplete = false;
-    }
-  });
-</script>
+  <section class="instructions">
+    <p>Catch power-ups, chain combos, and deflect multiball chaos as you carve through neon crystal brickwork. Launch with <strong>Space</strong> and steer using <strong>←/→</strong> or <strong>A/D</strong>.</p>
+  </section>
+  <canvas id="game"></canvas>
+  <script type="module" src="../games/breakout/main.js"></script>
 </body>
 </html>

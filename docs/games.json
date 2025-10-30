@@ -3,7 +3,7 @@
     "slug": "pong",
     "title": "Pong",
     "href": "pong.html",
-    "description": "Face off against a reactive AI paddle in this faithful yet polished rendition of the arcade classic.",
+    "description": "Battle the adaptive Rally Circuit AI through power-up fueled matches, multiball chaos, and sprint-enabled volleys.",
     "meta": ["Arcade", "Single player", "Keyboard"],
     "tags": ["arcade", "classic", "quick", "sports"]
   },
@@ -11,7 +11,7 @@
     "slug": "breakout",
     "title": "Breakout",
     "href": "breakout.html",
-    "description": "Clear cascading waves of bricks with satisfying paddle control, power‑ups, and punchy particle FX.",
+    "description": "Ride neon waves of crystal bricks with multiball storms, paddle shields, combo scoring, and evolving arenas.",
     "meta": ["Arcade", "Reflex", "Keyboard"],
     "tags": ["arcade", "classic", "brick-breaker"]
   },
@@ -19,7 +19,7 @@
     "slug": "snake",
     "title": "Snake",
     "href": "snake.html",
-    "description": "Grow the neon serpent, collect food, and survive as the grid fills with your own twisting tail.",
+    "description": "Hunt rare fruit, trigger wrap portals, dodge hazards, and complete ongoing missions in this synth-infused survival run.",
     "meta": ["Arcade", "Endless", "Keyboard"],
     "tags": ["arcade", "classic", "endless"]
   },
@@ -27,7 +27,7 @@
     "slug": "space-invaders",
     "title": "Space Invaders",
     "href": "space_invaders.html",
-    "description": "Defend Earth from descending alien squadrons with responsive shooting and smooth scaling difficulty.",
+    "description": "Command Orbitfall defenses against multi-formation fleets, enemy barrages, bunkers, and roaming motherships.",
     "meta": ["Shooter", "Retro", "Keyboard"],
     "tags": ["shooter", "classic", "arcade"]
   },
@@ -35,7 +35,7 @@
     "slug": "bullet-hell",
     "title": "Bullet Hell",
     "href": "bullet_hell.html",
-    "description": "Dodge intricate bullet patterns and weave through mesmerizing particle storms to chase high scores.",
+    "description": "Dash through telegraphed bullet waves, collect energy for fresh charges, and escalate into relentless nova storms.",
     "meta": ["Shooter", "Endless", "Hard"],
     "tags": ["shooter", "endless", "challenge"]
   },
