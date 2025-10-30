@@ -2,133 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Pong (Single Player)</title>
+  <title>Pong: Rally Circuit</title>
   <style>
-    body { margin:0; background:#111; color:#fff; font-family:sans-serif; }
-    #game { display:block; margin:0 auto; background:#000; }
+    :root { color-scheme: dark; }
+    body { margin:0; background:#020617; color:#e2e8f0; font-family:'JetBrains Mono',system-ui,sans-serif; display:flex; flex-direction:column; min-height:100vh; }
+    .instructions { padding:16px; font-size:14px; line-height:1.5; background:rgba(15,23,42,0.85); border-bottom:1px solid rgba(148,163,184,0.15); }
+    #game { flex:1; display:block; width:100%; height:100%; }
   </style>
 </head>
 <body>
-<canvas id="game" width="640" height="480"></canvas>
-<script type="module">
-  import { initCanvas, clear, drawRect, drawText } from '../game-lib/render/canvas.js';
-  import { startGameLoop, stopGameLoop } from '../game-lib/core/loop.js';
-  import { initKeyboard, isKeyDown } from '../game-lib/input/keyboard.js';
-
-  // Initialize canvas and keyboard
-  const { ctx } = initCanvas('#game', 640, 480);
-  initKeyboard();
-
-  // Game state
-  const paddleWidth = 10;
-  const paddleHeight = 80;
-  const ballSize = 10;
-  let player = { x: 10, y: 200, w: paddleWidth, h: paddleHeight, speed: 300 };
-  let ai = { x: 640 - 20, y: 200, w: paddleWidth, h: paddleHeight, speed: 250 };
-  let ball = { x: 320, y: 240, w: ballSize, h: ballSize, vx: 220, vy: 150 };
-  let score = 0;
-  let highScore = 0;
-  let gameOver = false;
-
-  function resetBall() {
-    ball.x = 320;
-    ball.y = 240;
-    // Randomize initial direction
-    const angle = (Math.random() * 0.5 - 0.25) * Math.PI; // between -45 and 45 degrees
-    const speed = 250 + score * 10;
-    ball.vx = Math.cos(angle) * speed;
-    ball.vy = Math.sin(angle) * speed;
-    // Ensure ball always moves towards player initially
-    if (Math.random() < 0.5) ball.vx *= -1;
-  }
-
-  function update(dt) {
-    if (gameOver) return;
-    // Player movement
-    if (isKeyDown('ArrowUp')) player.y -= player.speed * dt;
-    if (isKeyDown('ArrowDown')) player.y += player.speed * dt;
-    // Clamp player paddle within screen
-    if (player.y < 0) player.y = 0;
-    if (player.y + player.h > 480) player.y = 480 - player.h;
-    // AI movement (simple tracking)
-    const aiCenter = ai.y + ai.h / 2;
-    const targetY = ball.y;
-    const delta = targetY - aiCenter;
-    ai.y += Math.sign(delta) * ai.speed * dt;
-    // Clamp AI paddle
-    if (ai.y < 0) ai.y = 0;
-    if (ai.y + ai.h > 480) ai.y = 480 - ai.h;
-    // Move ball
-    ball.x += ball.vx * dt;
-    ball.y += ball.vy * dt;
-    // Collision with top/bottom
-    if (ball.y < 0) {
-      ball.y = 0;
-      ball.vy *= -1;
-    } else if (ball.y + ball.h > 480) {
-      ball.y = 480 - ball.h;
-      ball.vy *= -1;
-    }
-    // Collision with paddles
-    function collide(rect) {
-      return (
-        ball.x < rect.x + rect.w &&
-        ball.x + ball.w > rect.x &&
-        ball.y < rect.y + rect.h &&
-        ball.y + ball.h > rect.y
-      );
-    }
-    if (collide(player)) {
-      ball.x = player.x + player.w;
-      ball.vx = Math.abs(ball.vx) * 1.05; // increase speed slightly
-      // Adjust vertical velocity based on where the ball hits the paddle
-      const hitPos = (ball.y + ball.h / 2) - (player.y + player.h / 2);
-      ball.vy = hitPos * 5;
-    } else if (collide(ai)) {
-      ball.x = ai.x - ball.w;
-      ball.vx = -Math.abs(ball.vx) * 1.05;
-      const hitPos = (ball.y + ball.h / 2) - (ai.y + ai.h / 2);
-      ball.vy = hitPos * 5;
-    }
-    // Scoring
-    if (ball.x < 0) {
-      // AI scores (player loses)
-      gameOver = true;
-      highScore = Math.max(highScore, score);
-    } else if (ball.x > 640) {
-      // Player scores, reset ball
-      score += 1;
-      resetBall();
-    }
-  }
-
-  function render() {
-    // Clear screen
-    clear(ctx, '#000');
-    // Draw paddles and ball
-    drawRect(ctx, player.x, player.y, player.w, player.h, '#0f0');
-    drawRect(ctx, ai.x, ai.y, ai.w, ai.h, '#f00');
-    drawRect(ctx, ball.x, ball.y, ball.w, ball.h, '#fff');
-    // Draw score
-    drawText(ctx, `Score: ${score}`, 10, 10, { color:'#fff', font:'16px monospace' });
-    drawText(ctx, `High: ${highScore}`, 10, 28, { color:'#888', font:'14px monospace' });
-    if (gameOver) {
-      drawText(ctx, 'Game Over!', 320, 200, { color:'#fff', font:'32px sans-serif', textAlign:'center' });
-      drawText(ctx, 'Press Space to restart', 320, 240, { color:'#ccc', font:'16px sans-serif', textAlign:'center' });
-    }
-  }
-
-  // Reset ball at start
-  resetBall();
-  startGameLoop(update, render);
-  // Restart on Space when game over
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && gameOver) {
-      score = 0;
-      gameOver = false;
-      resetBall();
-    }
-  });
-</script>
+  <section class="instructions">
+    <p>Win the best-of series with smart serves and power-up control. Use <strong>↑/↓</strong> or <strong>W/S</strong>, tap <strong>Shift</strong> for a burst, and press <strong>R</strong> after the match to reset.</p>
+  </section>
+  <canvas id="game"></canvas>
+  <script type="module" src="../games/pong/main.js"></script>
 </body>
 </html>
