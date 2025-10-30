@@ -1,31 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Game Library Examples</title>
-  <style>
-    body { margin:0; padding:20px; font-family:Arial, sans-serif; background:#0b0b0d; color:#e6eef8; }
-    h1 { margin-bottom:12px; }
-    ul { list-style:none; padding:0; }
-    li { margin:8px 0; }
-    a { color:#58a6ff; text-decoration:none; font-weight:bold; }
-    a:hover { text-decoration:underline; }
-    .desc { color:#9aa4b2; font-size:0.9em; margin-left:6px; }
-  </style>
-</head>
-<body>
-  <h1>Game Library Examples</h1>
-  <p>Select a game below to launch it.  All games here are written using the modular game library in <code>game-lib</code> or are ports of older demos.  To run these examples locally you should serve the project with a local HTTP server.</p>
-  <ul>
-    <li><a href="pong.html">Pong</a><span class="desc"> – Single‑player Pong with AI and scaling difficulty</span></li>
-    <li><a href="breakout.html">Breakout</a><span class="desc"> – Classic brick‑breaker with paddle and bouncing ball</span></li>
-    <li><a href="snake.html">Snake</a><span class="desc"> – Simple implementation of the classic snake game</span></li>
-    <li><a href="space_invaders.html">Space Invaders</a><span class="desc"> – Shoot down waves of aliens before they reach you</span></li>
-    <li><a href="bullet_hell.html">Bullet Hell</a><span class="desc"> – Dodge endless radial bullet patterns to survive</span></li>
-    <li><a href="procedural_snake.html">Procedural Snake</a><span class="desc"> – Advanced snake game with combos, magnets and AI from the original project</span></li>
-    <li><a href="space_trippin.html">Space Trippin</a><span class="desc"> – Psychedelic space runner from the original project</span></li>
-    <li><a href="tinycraft.html">TinyCraft</a><span class="desc"> – Tiny crafting and survival game from the original project</span></li>
-  </ul>
-  <p style="margin-top:20px;font-size:0.8em;color:#9aa4b2;">Tip: Use the batch script <code>run_games.bat</code> in the project root to start a local server and open this page automatically on Windows.  For GitHub Pages, simply place these files at the root of your repository.</p>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arcade Library · Psychic Chainsaw</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/styles/site.css" />
+    <script type="module" src="assets/scripts/index.js" defer></script>
+  </head>
+  <body>
+    <div class="main-shell">
+      <header>
+        <div>
+          <h1 class="hero-title">Psychic <span>Chainsaw</span> Arcade</h1>
+          <p class="hero-lede">
+            A curated cabinet of browser games powered by the shared <code>game-lib</code> engine. Browse,
+            search, and jump in — everything runs client-side, no installs required.
+          </p>
+        </div>
+        <div class="controls" role="search">
+          <div class="search-group">
+            <input
+              id="game-search"
+              class="search-input"
+              type="search"
+              name="search"
+              placeholder=" "
+              aria-label="Search games"
+              autocomplete="off"
+            />
+            <label for="game-search">Search by title, description, or tag…</label>
+          </div>
+          <div class="filter-bar" aria-label="Filter games by tag" data-role="filter-row"></div>
+        </div>
+      </header>
+
+      <div class="status-row" aria-live="polite">
+        <span data-role="result-count">Loading games…</span>
+        <span>Filters combine using “AND” logic for precise discovery.</span>
+      </div>
+
+      <ul class="game-grid" data-role="game-grid" aria-live="polite" aria-busy="false"></ul>
+      <div class="empty-state" data-role="empty-state" hidden>
+        <h2>No games match that search yet</h2>
+        <p>Try a different combination of filters or clear the search field to see everything.</p>
+      </div>
+
+      <p class="tip">
+        Tip: Use the batch script <code>run_games.bat</code> (Windows) or run <code>python -m http.server</code> from the
+        repository root to host the library locally. Drop the folder onto GitHub Pages to share it publicly.
+      </p>
+
+      <footer>
+        <span>Built with the modular engine found in <code>game-lib/</code>.</span>
+        <a href="https://github.com/" rel="noopener" target="_blank">View source on GitHub</a>
+      </footer>
+    </div>
+
+    <template id="game-card-template">
+      <li class="game-card" tabindex="-1">
+        <div>
+          <h2 data-role="title"></h2>
+          <p data-role="description"></p>
+          <ul class="meta-list" data-role="meta"></ul>
+        </div>
+        <a class="play-button" data-role="link" target="_blank" rel="noopener"></a>
+      </li>
+    </template>
+  </body>
 </html>
