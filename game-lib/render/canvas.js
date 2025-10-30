@@ -25,13 +25,54 @@ export function initCanvas(target, width = 800, height = 600) {
     canvas = document.createElement('canvas');
     document.body.appendChild(canvas);
   }
-  canvas.width = width;
-  canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     throw new Error('Could not get 2D context from canvas.');
   }
+  resizeCanvasToDisplaySize(canvas, ctx, width, height);
   return { canvas, ctx };
+}
+
+/**
+ * Ensures the canvas matches the requested display size while respecting the
+ * current device pixel ratio.  The canvas backing resolution is scaled by the
+ * DPR so visuals remain crisp on high DPI displays, while the drawing
+ * coordinate system stays aligned with CSS pixels.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width - Desired CSS width
+ * @param {number} height - Desired CSS height
+ * @returns {{width:number, height:number, dpr:number}}
+ */
+export function resizeCanvasToDisplaySize(canvas, ctx, width, height) {
+  const fallbackWidth = canvas.__logicalWidth || canvas.clientWidth || canvas.width || 1;
+  const fallbackHeight = canvas.__logicalHeight || canvas.clientHeight || canvas.height || 1;
+  const cssWidth = Math.max(1, Math.floor(width ?? fallbackWidth));
+  const cssHeight = Math.max(1, Math.floor(height ?? fallbackHeight));
+  const dpr = window.devicePixelRatio || 1;
+  const displayWidth = Math.round(cssWidth * dpr);
+  const displayHeight = Math.round(cssHeight * dpr);
+
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${cssHeight}px`;
+
+  if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
+  }
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+
+  canvas.__logicalWidth = cssWidth;
+  canvas.__logicalHeight = cssHeight;
+  canvas.__devicePixelRatio = dpr;
+  ctx.__logicalWidth = cssWidth;
+  ctx.__logicalHeight = cssHeight;
+  ctx.__devicePixelRatio = dpr;
+
+  return { width: cssWidth, height: cssHeight, dpr };
 }
 
 /**
@@ -44,9 +85,13 @@ export function initCanvas(target, width = 800, height = 600) {
 export function clear(ctx, color) {
   if (color) {
     ctx.fillStyle = color;
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    const w = ctx.__logicalWidth || ctx.canvas.__logicalWidth || ctx.canvas.width;
+    const h = ctx.__logicalHeight || ctx.canvas.__logicalHeight || ctx.canvas.height;
+    ctx.fillRect(0, 0, w, h);
   } else {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    const w = ctx.__logicalWidth || ctx.canvas.__logicalWidth || ctx.canvas.width;
+    const h = ctx.__logicalHeight || ctx.canvas.__logicalHeight || ctx.canvas.height;
+    ctx.clearRect(0, 0, w, h);
   }
 }
 
