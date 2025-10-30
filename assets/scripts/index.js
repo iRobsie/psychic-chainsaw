@@ -1,69 +1,21 @@
-const GAMES = [
-  {
-    slug: "pong",
-    title: "Pong",
-    href: "pong.html",
-    description: "Face off against a reactive AI paddle in this faithful yet polished rendition of the arcade classic.",
-    meta: ["Arcade", "Single player", "Keyboard"],
-    tags: ["arcade", "classic", "quick", "sports"],
-  },
-  {
-    slug: "breakout",
-    title: "Breakout",
-    href: "breakout.html",
-    description: "Clear cascading waves of bricks with satisfying paddle control, power‑ups, and punchy particle FX.",
-    meta: ["Arcade", "Reflex", "Keyboard"],
-    tags: ["arcade", "classic", "brick-breaker"],
-  },
-  {
-    slug: "snake",
-    title: "Snake",
-    href: "snake.html",
-    description: "Grow the neon serpent, collect food, and survive as the grid fills with your own twisting tail.",
-    meta: ["Arcade", "Endless", "Keyboard"],
-    tags: ["arcade", "classic", "endless"],
-  },
-  {
-    slug: "space-invaders",
-    title: "Space Invaders",
-    href: "space_invaders.html",
-    description: "Defend Earth from descending alien squadrons with responsive shooting and smooth scaling difficulty.",
-    meta: ["Shooter", "Retro", "Keyboard"],
-    tags: ["shooter", "classic", "arcade"],
-  },
-  {
-    slug: "bullet-hell",
-    title: "Bullet Hell",
-    href: "bullet_hell.html",
-    description: "Dodge intricate bullet patterns and weave through mesmerizing particle storms to chase high scores.",
-    meta: ["Shooter", "Endless", "Hard"],
-    tags: ["shooter", "endless", "challenge"],
-  },
-  {
-    slug: "procedural-snake",
-    title: "Procedural Snake",
-    href: "procedural_snake.html",
-    description: "A modernized take on Snake with combo systems, magnetic boosts, and adaptive procedural level beats.",
-    meta: ["Arcade", "Score chase", "Keyboard"],
-    tags: ["arcade", "endless", "advanced"],
-  },
-  {
-    slug: "space-trippin",
-    title: "Space Trippin",
-    href: "space_trippin.html",
-    description: "Ride a synthwave hyperspace tunnel, dodge debris, and chase chill vibes in this experimental runner.",
-    meta: ["Runner", "Endless", "Mouse"],
-    tags: ["runner", "experimental", "endless"],
-  },
-  {
-    slug: "tinycraft",
-    title: "TinyCraft",
-    href: "tinycraft.html",
-    description: "A mini survival sandbox with crafting, exploration, and bite-sized progression loops.",
-    meta: ["Simulation", "Creative", "Keyboard"],
-    tags: ["strategy", "creative", "relaxing"],
-  },
-];
+async function loadGames() {
+  try {
+    const response = await fetch("games.json", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Unexpected response: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+      throw new Error("Games manifest must be an array");
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Failed to load games manifest", error);
+    return null;
+  }
+}
 
 const FILTER_CATEGORIES = [
   { label: "Arcade", value: "arcade" },
@@ -80,7 +32,7 @@ const HAS_STRING_NORMALIZE = typeof String.prototype.normalize === "function";
 // don't support Unicode property escapes (e.g. older Safari builds).
 const DIACRITIC_PATTERN = /[\u0300-\u036f]/g;
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const grid = document.querySelector("[data-role=game-grid]");
   const status = document.querySelector("[data-role=result-count]");
   const emptyState = document.querySelector("[data-role=empty-state]");
@@ -105,6 +57,23 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   const activeFilters = new Set();
+
+  const games = await loadGames();
+
+  if (!Array.isArray(games)) {
+    status.textContent = "Unable to load games.";
+    emptyState.hidden = false;
+    const emptyTitle = emptyState.querySelector("h2");
+    const emptyMessage = emptyState.querySelector("p");
+    if (emptyTitle) {
+      emptyTitle.textContent = "Games manifest unavailable";
+    }
+    if (emptyMessage) {
+      emptyMessage.textContent = "Refresh the page or check the repository configuration to restore the library.";
+    }
+    grid.setAttribute("aria-busy", "false");
+    return;
+  }
 
   function toggleFilter(value, button) {
     if (activeFilters.has(value)) {
@@ -158,13 +127,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function render() {
     const query = normalise(searchInput.value.trim());
 
-    const matches = GAMES.filter((game) => matchesQuery(game, query) && matchesFilters(game))
+    const matches = games
+      .filter((game) => matchesQuery(game, query) && matchesFilters(game))
       .slice()
       .sort((a, b) => a.title.localeCompare(b.title));
 
-    status.textContent = matches.length === GAMES.length
-      ? `Showing all ${GAMES.length} games`
-      : `Showing ${matches.length} of ${GAMES.length} games`;
+    status.textContent = matches.length === games.length
+      ? `Showing all ${games.length} games`
+      : `Showing ${matches.length} of ${games.length} games`;
 
     grid.setAttribute("aria-busy", "true");
     grid.textContent = "";

@@ -4,24 +4,26 @@ This repository collects a set of browser-based arcade experiments that all run 
 
 ## Local development
 
-You do not need any build tooling. Serve the repository root with a static file server and open `http://localhost:8000/`:
+You do not need heavy build tooling. Serve the repository root with a static file server and open `http://localhost:8000/`:
 
 ```bash
 python -m http.server 8000
 ```
 
-All assets are referenced with relative URLs, so any simple HTTP server will do.
+All assets are referenced with relative URLs, so any simple HTTP server will do. Update `games.json` to curate which games appear on
+the landing page — it powers the search UI and can be edited directly in GitHub’s interface.
 
 ## GitHub Pages deployment
 
-GitHub Pages can publish straight from the `docs/` folder. The `docs` directory in this repository mirrors the content in the repository root and also contains a `.nojekyll` marker so the raw JavaScript modules load without Jekyll processing.
+GitHub Pages is configured via GitHub Actions. The workflow in `.github/workflows/pages.yml` rebuilds the static site and publishes the
+result, ensuring the `docs/` folder stays in sync with the source files.
 
 1. Go to **Settings → Pages** for the repository.
-2. Under **Build and deployment**, choose **Deploy from a branch**.
-3. Set the branch to `main` (or `master`, depending on your default branch) and the folder to `/docs`.
-4. Save the changes. Pages will build and your site will be available at `https://<username>.github.io/psychic-chainsaw/`.
+2. Set **Source** to **GitHub Actions**.
+3. Save the changes. Pages will build and your site will be available at `https://<username>.github.io/psychic-chainsaw/`.
 
-When you update files in the root of the repository, copy the changes into `docs/` as well so the published version stays in sync. You can automate this with a simple script if you make frequent updates.
+When you update files in the root of the repository, run `node scripts/build.js` (or `npm run build` if you prefer) to regenerate the
+`docs/` folder for local preview. The automated deployment does this for every push.
 
 If you prefer using a `gh-pages` branch, you can delete the `docs/` folder and publish the repository contents with any static site deployment workflow.
 
